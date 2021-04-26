@@ -228,10 +228,10 @@ class LossModule(nn.Module):
 	
 	def getBatch(self):
 		try:
-			self.X, self.labels = next(self.iter_train)
+			self.X, self.labels,_ = next(self.iter_train)
 		except:
 			self.iter_train = iter(self.train)
-			self.X, self.labels = next(self.iter_train)
+			self.X, self.labels,_ = next(self.iter_train)
 		self.X = self.X.to(self.device)
 		self.labels = self.labels.to(self.device)
 			

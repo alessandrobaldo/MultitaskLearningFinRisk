@@ -156,7 +156,7 @@ def train(model, train_loader, test_loader, loss_module, optimizer, epochs):
 	for i in range(1, epochs+1):
 		train_loss = 0
 		for j,(batch,labels) in enumerate(train_loader,0):
-			batch, labels = batch.to(device), labels.to(device)
+			batch, labels,_ = batch.to(device), labels.to(device)
 			preds = model(batch)
 			loss = loss_module(preds, labels) + negative_log_prior(model.named_parameters())
 			train_loss += loss
@@ -165,7 +165,7 @@ def train(model, train_loader, test_loader, loss_module, optimizer, epochs):
 			optimizer.step()
 			with torch.no_grad():
 				val = iter(test_loader)
-				val_X, val_Y = next(val)
+				val_X, val_Y,_ = next(val)
 				val_X, val_Y = val_X.to(device), val_Y.to(device)
 				val_preds = torch.squeeze(model(val_X))
 				val_loss = loss_module(val_preds, val_Y) + negative_log_prior(model.named_parameters())

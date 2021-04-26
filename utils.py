@@ -8,8 +8,10 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 import time
 
+#APIKEY = '04NF3SJ1QFXC82ER'  #polito 
+APIKEY = '80H8XTPEDCUKU37T' #eurecom
 
-def stockTS(function = None, symbol = None, interval = None, adjusted = True, outputsize = 'full', datatype = 'csv', apikey = '80H8XTPEDCUKU37T'):
+def stockTS(function = None, symbol = None, interval = None, adjusted = True, outputsize = 'full', datatype = 'csv', apikey = APIKEY):
 	"""
 	Input:
 	- function: specify the time frequency of the time series:
@@ -138,13 +140,17 @@ class TechnicalPortfolioTimeSeries(Dataset):
 		self.merged_df = self.merged_df.dropna(how='any',axis=0)
 		self.merged_df.columns = columns
 		self.Y = self.merged_df['adjusted_close'].values[window+pred_window:]
+		self.index = np.array([self.merged_df.index.day.values[window+pred_window:],
+							  self.merged_df.index.month.values[window+pred_window:],
+							  self.merged_df.index.year.values[window+pred_window:]]).T
+		print(self.index.shape)
+							   
 		self.merged_df = self.merged_df.drop(['adjusted_close'], axis=1)
 	
 		self.norm_df = MinMaxScaler().fit(self.merged_df).transform(self.merged_df)
 		
 		num_f = int(len(self.merged_df.columns) / len(components))
 		trains = []
-
 
 		for i in range(len(self.merged_df)-window-pred_window):
 			stack = []
@@ -166,9 +172,11 @@ class TechnicalPortfolioTimeSeries(Dataset):
 		if torch.is_tensor(idx):
 			idx = idx.tolist()
 		x,y = self.X[idx,:], self.Y[idx]
+		index = self.index[idx,:]
 		x,y = self.transform(x,y)
-		return (x,y)
-			
+		return (x,y,index)
+	
+	
 
 class ToTensor(object):
 	"""Convert ndarrays in sample to Tensors."""
@@ -281,7 +289,7 @@ def getIndicators(symbol = None, interval = 'daily'):
 	
 	
 
-def getIndicator(function = None, symbol = None, interval = None, timeperiod = None, series_type = 'close', datatype = 'json', apikey = '80H8XTPEDCUKU37T'):
+def getIndicator(function = None, symbol = None, interval = None, timeperiod = None, series_type = 'close', datatype = 'json', apikey = APIKEY):
 	"""
 	Input:
 	- function: specifying the Indicator
@@ -308,12 +316,24 @@ def getIndicator(function = None, symbol = None, interval = None, timeperiod = N
 	
 	
 	query = "https://www.alphavantage.co/query?" 
-	print(query+params)
 	resp = requests.get(query+params).json()
-	print(resp.keys())
 	data = resp["Technical Analysis: {}".format(function)]
-	
 	df = pd.DataFrame.from_dict(data, orient = 'index')
 	df.index = pd.to_datetime(df.index)
 	df = df.sort_index(ascending = True)
 	return df
+
+def download_csv(stocks,*args):
+	for s in stocks:
+		print(s)
+		ind = ut.getIndicators(symbol = s)
+		ind = ind.sort_index(axis=1)
+		time.sleep(60)
+		price = ut.stockTS(function='TIME_SERIES_DAILY',symbol = s)
+		price = price.sort_index(axis=1)
+		merged_df = pd.concat([ind,price], axis = 1)
+		#merged_df = pd.merge(ind,price, left_index = True, right_index = True)
+		merged_df = merged_df.dropna(how='any',axis=0)
+		merged_df.columns = ind.columns + price.columns
+		merged_df.to_csv('Tech/{}.csv'.format(s))
+		time.sleep(60)
