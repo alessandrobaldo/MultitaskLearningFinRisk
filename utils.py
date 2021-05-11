@@ -143,7 +143,6 @@ class TechnicalPortfolioTimeSeries(Dataset):
 		self.index = np.array([self.merged_df.index.day.values[window+pred_window:],
 							  self.merged_df.index.month.values[window+pred_window:],
 							  self.merged_df.index.year.values[window+pred_window:]]).T
-		print(self.index.shape)
 							   
 		self.merged_df = self.merged_df.drop(['adjusted_close'], axis=1)
 	

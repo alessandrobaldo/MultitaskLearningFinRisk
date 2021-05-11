@@ -127,7 +127,6 @@ class ResForkNet(nn.Module):
 		bs = 1
 		inp = Variable(torch.rand(bs, num_inputs, timesteps))
 		output_feat = r(inp)
-		print(output_feat.size())
 		n_size = output_feat.data.view(bs, -1).size(1)
 		return n_size
 
