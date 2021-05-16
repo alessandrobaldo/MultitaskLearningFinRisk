@@ -170,7 +170,8 @@ def train(model, train_loader, test_loader, loss_module, optimizer, epochs):
 				val_loss = loss_module(val_preds, val_Y) + negative_log_prior(model.named_parameters())
 		
 			print('',end='\r')
-			print("Epochs:[{}/{}] {}>{} train_loss: {}, val_loss: {}".format(i,epochs,"-"*j,"-"*(len(train_loader)-j-1),train_loss/(j+1), val_loss), end='')
+			print("Epochs:[{}/{}] {}>{} train_loss: {:.4f}, val_loss: {:.4f}".format(
+				i,epochs,int(20//(len(train_loader)/(j+1))),"-"*(int(20 - 20//(len(train_loader)/(j+1)))), train_loss/(j+1), val_loss), end='')
 		losses["train"].append(train_loss.item()/(j+1))
 		losses["val"].append(val_loss.item())
 	return losses

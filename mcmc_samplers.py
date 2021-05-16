@@ -193,8 +193,9 @@ class SGHMCSampler(_BaseSampler):
 		for parameter in self.walker.state:
 			self.walker.state[parameter] = {}
 		for step in range(nsamples * keep_every + num_burn_in_steps):
-			if (step+1)%((nsamples * keep_every + num_burn_in_steps)/5)==0:
-				print("Sampling {}/{}".format(step+1, nsamples * keep_every + num_burn_in_steps))
+			if (step+1)%((nsamples * keep_every + num_burn_in_steps)/10)==0:
+				print("\r", end="")
+				print("Sampling {}/{}".format(step+1, nsamples * keep_every + num_burn_in_steps), end="")
 			
 			self.walker.zero_grad()
 			#loss = self.loss_module() / self.N 
@@ -212,7 +213,6 @@ class LossModule(nn.Module):
 	def __init__(self, model,train, loss, N):
 		super(LossModule, self).__init__()
 		self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-		print(self.device)
 		self.model = model.to(self.device)
 		self.train = train
 		self.iter_train = iter(self.train)

@@ -6,14 +6,25 @@ from sklearn.preprocessing import MinMaxScaler
 from collections import OrderedDict
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
+from mcmc_samplers import SGHMCSampler,LossModule
+from ResForkNet import *
 import time
+import datetime
+import matplotlib.pyplot as plt
+import os
+import shutil
+
+plt.style.use('ggplot')
+
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 #APIKEY = '04NF3SJ1QFXC82ER'  #polito 
 APIKEY = '80H8XTPEDCUKU37T' #eurecom
 
 def stockTS(function = None, symbol = None, interval = None, adjusted = True, outputsize = 'full', datatype = 'csv', apikey = APIKEY):
 	"""
-	Input:
+	Method to obtain a series of historical prices and volumes for a particular stock
+	Args:
 	- function: specify the time frequency of the time series:
 		- TIME_SERIES_INTRADAY, TIME_SERIES_DAILY, TIME_SERIES_WEEKLY, TIME_SERIES_MONTHLY
 	- symbol: the ticker of the symbol of which you want to retrieve data
@@ -39,13 +50,14 @@ def stockTS(function = None, symbol = None, interval = None, adjusted = True, ou
 
 def portfolioTS(components, interval = None):
 	"""
-	Input:
+	Method to obtain a series of historical prices and volumes for a particular portfolio of stocks
+	Args:
 	- ind_components: list of independent stocks
 	- dep_components: list of dependent components
 	- interval: required to be specified if TIME_SERIES_INTRADAY
 	
 	Returns:
-	A merged pandas dataframe with the historical close prices
+	A merged pandas dataframe with the historical adjusted close prices
 	"""
 	dfs = []
 	for comp in components:
@@ -60,23 +72,36 @@ def portfolioTS(components, interval = None):
 	merged_df.columns = components
 	return merged_df
 
+class ToTensor(object):
+	"""
+	Class to convert ndarrays to Torch Tensors
+	"""
+	def __call__(self, x,y):
+		return torch.from_numpy(np.array(x)).type(torch.FloatTensor), torch.Tensor([y]).type(torch.FloatTensor).squeeze()
+		
+
 class StockTimeSeries(Dataset):
-	
+	"""
+	Class to build a torch.utils.data.Dataset for a singular stock, already fragmented in windows, having as feature only the adjusted close price
+	Args:
+	- symbol: the stock of interest
+	- window: the number of past samples the model will consider
+	- transform: the torchvision.transform to be applied
+	"""
 
 	def __init__(self, symbol, window = 30, transform=None):
 		
-		self.df = stockTS(function = 'TIME_SERIES_DAILY',symbol = symbol)['close']
+		self.df = stockTS(function = 'TIME_SERIES_DAILY',symbol = symbol)['adjusted_close']
 		self.df = self.df.reset_index(drop = True)
 		self.df = self.df.values.tolist()
 		self.X = np.array([[self.df[i:i+window]] for i in range(len(self.df)-window)])
 		self.X = np.squeeze(self.X)
 		self.Y = self.X[:,-1]
 		self.X = np.delete(self.X, -1, 1)
-		print(self.X, self.Y)
 		self.X = MinMaxScaler().fit(self.X).transform(self.X)
 		self.X = np.expand_dims(self.X, axis=1)
 		self.transform = transform
-		print(self.X.shape, self.Y.shape)
+		print(self.X.shape, self.Y.shape, end="")
 		
 	
 	def __len__(self):
@@ -91,6 +116,13 @@ class StockTimeSeries(Dataset):
 	
 	
 class PortfolioTimeSeries(Dataset):
+	"""
+	Class to build a torch.utils.data.Dataset for a portfolio of stocks, already fragmented in windows, having as feature only the adjusted close price
+	Args:
+	- symbol: the stock of interest
+	- window: the number of past samples the model will consider
+	- transform: the torchvision.transform to be applied
+	"""
 	def __init__(self, components, window = 30, transform=None):
 		
 		self.df = portfolioTS(components)
@@ -110,7 +142,7 @@ class PortfolioTimeSeries(Dataset):
 		self.X = MinMaxScaler().fit(self.X).transform(self.X)
 		self.X = np.expand_dims(self.X, axis=1)
 		self.transform = transform
-		print(self.X.shape, self.Y.shape)
+		print(self.X.shape, self.Y.shape, end="")
 		
 	
 	def __len__(self):
@@ -124,6 +156,13 @@ class PortfolioTimeSeries(Dataset):
 		return (x,y)
 
 class TechnicalPortfolioTimeSeries(Dataset):
+	"""
+	Class to build a torch.utils.data.Dataset for a portfolio of stocks, already fragmented in windows, having as feature the technical indicators
+	Args:
+	- symbol: the stock of interest
+	- window: the number of past samples the model will consider
+	- transform: the torchvision.transform to be applied
+	"""
 	def __init__(self, components, window = 30, pred_window = 7,  transform=None):
 		dfs = []
 		columns = []
@@ -160,7 +199,7 @@ class TechnicalPortfolioTimeSeries(Dataset):
 			trains.append(stack)
 
 		self.X = np.array(trains)
-		print(self.X.shape, self.Y.shape)
+		print(self.X.shape, self.Y.shape, end="")
 		self.transform = transform
 
 
@@ -175,13 +214,6 @@ class TechnicalPortfolioTimeSeries(Dataset):
 		x,y = self.transform(x,y)
 		return (x,y,index)
 	
-	
-
-class ToTensor(object):
-	"""Convert ndarrays in sample to Tensors."""
-	def __call__(self, x,y):
-		return torch.from_numpy(np.array(x)).type(torch.FloatTensor), torch.Tensor([y]).type(torch.FloatTensor).squeeze()
-		
 
 def returns(df, **kwargs):
 	"""
@@ -207,7 +239,8 @@ def annualize_vol(returns, n_periods):
 
 def annualize_rets(returns, n_periods):
 	"""
-	Input:
+	Method to evaluate the annualized returns given a dataframe of retu
+	Args:
 	- returns: pandas series or array of returns
 	- n_periods: number of periods composing an year in the df, to annualize the returns
 	
@@ -221,7 +254,7 @@ def annualize_rets(returns, n_periods):
 
 def sharpe_ratio(returns, riskfree_rate, n_periods):
 	"""
-	Input:
+	Args:
 	- returns: pandas series or array of returns
 	- riskfree_rate: interest rate of risk-free assets
 	- n_periods: number of periods composing an year in the df, to annualize the sharpe_ratio
@@ -239,6 +272,15 @@ def sharpe_ratio(returns, riskfree_rate, n_periods):
 
 
 def getIndicators(symbol = None, interval = 'daily'):
+	"""
+	Method to obtain a pre-specified list of technical indicators for a particular stock
+	Args:
+	- symbol: the stock symbol for which we want to retrieve the indicators
+	- interval: the frequency of data to be retrieved
+	
+	Returns:
+	- a pandas DataFrame containing all the technical indicators for the specified stock
+	"""
 	dfs = []
 	indicators = {
 		"EMA":[10,20,50,100],
@@ -290,7 +332,7 @@ def getIndicators(symbol = None, interval = 'daily'):
 
 def getIndicator(function = None, symbol = None, interval = None, timeperiod = None, series_type = 'close', datatype = 'json', apikey = APIKEY):
 	"""
-	Input:
+	Args:
 	- function: specifying the Indicator
 	- symbol: the ticker of the symbol of which you want to retrieve data
 	- interval: required to be specified 1min, 5min, 15min, 30min, 60min, daily, weekly, monthly
@@ -323,6 +365,11 @@ def getIndicator(function = None, symbol = None, interval = None, timeperiod = N
 	return df
 
 def download_csv(stocks,*args):
+	"""
+	Method to download DataFrames with technical indicators, given a list of stocks of interest. It automatically tune the frequency of the requests
+	Args:
+	- stocks: list of the stocks to be retrieved
+	"""
 	for s in stocks:
 		print(s)
 		ind = ut.getIndicators(symbol = s)
@@ -336,3 +383,386 @@ def download_csv(stocks,*args):
 		merged_df.columns = ind.columns + price.columns
 		merged_df.to_csv('Tech/{}.csv'.format(s))
 		time.sleep(60)
+
+def build_test(test_loader, dataset, window = 30, pred_window = 30, num_f = 60):
+	"""
+	Method to build test_data to be predicted
+	Args:
+	- test_loader: DataLoader containing test_data
+	- dataset: original dataset
+	- window: window used as the "memory" of the model
+	- pred_windw: window used for the predictions
+	- num_f: dimensionality of the feature space
+	"""
+	
+	trains = []
+	for i in range(len(dataset.merged_df)-window-pred_window, len(dataset.merged_df)-window):
+		stack = [] 
+		for j in range(0,len(dataset.merged_df.columns), num_f):
+			stack.append(np.transpose(dataset.norm_df[i:window+i, j:j+num_f]))
+
+		stack = np.concatenate(stack, axis = 1)
+		trains.append(stack)
+	new_data = np.array(trains)
+	test_data, test_labels, index = next(iter(test_loader))
+	test_data = test_data.to(device)
+	test_data = torch.cat([test_data, torch.Tensor(new_data).type(torch.FloatTensor).to(device)], axis = 0)
+
+	return test_data, test_labels, index
+
+def plot_predictions(stocks, test_labels, preds, index_true, index_pred, show_days = 100, savefig = False):
+	"""
+	Method to plot predictions
+	Args:
+	- stocks: components to be plotted
+	- test_labels: ground truth to be plotted
+	- preds: predictions to be plotted
+	- index_true: temporal index of the ground truth
+	- index_pred: temporal index of the predictions
+	- show_days: number of days to show
+	- show_days: number of most recent days to plot
+	- savefig: whether to save or not the plot
+	"""
+	
+	fig, axs = plt.subplots(len(stocks),1, figsize=(30,len(stocks)*15))
+	for i,ax in enumerate(axs):
+		avg = torch.mean(preds[:,:,i], dim = 0)
+		q95 = np.percentile(preds[:,:,i].cpu().numpy(), 95, axis = 0)
+		q05 = np.percentile(preds[:,:,i].cpu().numpy(), 5, axis = 0)
+		q0 = np.min(preds[:,:,i].cpu().numpy(), axis = 0)
+		q100 = np.max(preds[:,:,i].cpu().numpy(), axis = 0)
+
+		ax.plot(index_pred[-show_days:],avg[-show_days:].detach().cpu().numpy(),
+				label = stocks[i]+" predicted")
+		ax.fill_between(index_pred[-show_days:], q95[-show_days:], q05[-show_days:], alpha = 0.3, label = stocks[i]+" uncertainty")
+		ax.scatter(index_pred[-show_days:], q0[-show_days:], marker='x', s = 1.4, c='r', label='Max deviation')
+		ax.scatter(index_pred[-show_days:], q100[-show_days:], marker='x', s = 1.4, c='r')
+		ax.plot(index_true[-show_days:],test_labels[-show_days:,i].detach().cpu().numpy(),
+				label = stocks[i]+" true")
+		ax.set_xlabel('Date',fontsize=14)
+		ax.set_ylabel('Price',fontsize=14)
+		ax.legend(fontsize=16)
+		
+	if savefig:
+		plt.savefig("Stocks.png")
+	
+	plt.show()
+
+
+def plot_predictions_from_samples(sampled_weights, model, stocks, test_loader, dataset, window = 30, pred_window = 30, num_f = 60, show_days = 100, savefig = False):
+	"""
+	Method to plot predictions from sampled weights
+	Args:
+	- sampled_weights: collection of sampled models
+	- model: model architecture
+	- stocks: components to be plotted
+	- test_loader: DataLoader containing test_data
+	- dataset: original dataset
+	- window: window used as the "memory" of the model
+	- pred_windw: window used for the predictions
+	- num_f: dimensionality of the feature space
+	- show_days: number of most recent days to plot
+	- savefig: whether to save or not the plot
+	"""
+	"""
+	Pick test data up to the last available day
+	"""
+	print("\r", end="")
+	print("Building test data", end="")
+	test_data, test_labels, index = build_test(test_loader, dataset, window, pred_window, num_f)
+	
+	"""
+	Compute the predictions
+	"""
+	print("\r", end="")
+	print("Computing the predictions", end="")
+	outputs = []
+	for i, set_params in enumerate(sampled_weights):       
+		state_dict = {}
+		for k,(name, param) in enumerate(model.named_parameters()):
+			state_dict[name] = torch.from_numpy(set_params[k])
+		state_dict_it = OrderedDict(state_dict)
+		model.load_state_dict(state_dict_it, strict=False)
+		with torch.no_grad():
+			output = model(test_data)
+		outputs.append(torch.unsqueeze(output,0))
+	preds = torch.cat(outputs, dim=0)
+
+	index_true = [datetime.datetime(index[i,2],index[i,1],index[i,0]) for i in range(index.shape[0])]
+	#compute the index up to the last predicted day
+	index_pred = index_true + [index_true[-1] + datetime.timedelta(days=i) for i in range(1,pred_window+1)]
+	
+	"""
+	Plot predictions vs. true trend
+	"""
+	print("\r", end="")
+	print("Plotting data", end="")
+	plot_predictions(stocks, test_labels, preds, index_true, index_pred, show_days, savefig)
+	print("\r", end="")
+	
+
+
+def plot_predictions_from_files(model_folder, model, stocks, test_loader, dataset, window = 30, pred_window = 30, num_f = 60, show_days = 100, savefig = False):
+	"""
+	Method to plot predictions from saved models
+	Args:
+	- sampled_weights: collection of sampled models
+	- model: model architecture
+	- stocks: components to be plotted
+	- test_loader: DataLoader containing test_data
+	- dataset: original dataset
+	- window: window used as the "memory" of the model
+	- pred_windw: window used for the predictions
+	- num_f: dimensionality of the feature space
+	- show_days: number of most recent days to plot
+	- savefig: whether to save or not the plot
+	"""
+	"""
+	Pick test data up to the last available day
+	"""
+	print("\r", end="")
+	print("Building test data", end="")
+	test_data, test_labels, index = build_test(test_loader, dataset, window, pred_window, num_f)
+	
+	"""
+	Compute the predictions
+	"""
+	print("\r", end="")
+	print("Computing the predictions", end="")
+	outputs = []
+
+	for f, file_model in enumerate(os.listdir(model_folder)):
+		model.load_state_dict(torch.load(model_folder + "/" + file_model, map_location = torch.device(device)))
+		model = model.to(device)
+
+		with torch.no_grad():
+			output = model(test_data)
+		outputs.append(torch.unsqueeze(output,0))
+
+		print("",end="\r")
+		print("Processed File {} of {}".format(f+1, len(os.listdir(model_folder))),end="")
+	
+	preds = torch.cat(outputs, dim=0)
+
+	"""
+	Plot predictions vs. true trend
+	"""
+	print("\r", end="")
+	print("Plotting data", end="")
+	plot_predictions(stocks, test_labels, preds, index_true, index_pred, show_days, savefig)
+	print("\r", end="")
+
+
+
+"""
+Performance Assessment
+"""
+
+def PearsonCorr(y1, y2):
+	"""
+	Method to compute the Pearson Correlation coefficient between two sequences
+	Args:
+	- y1, y2: the two sequences for whcih we want to compute the Pearson Correlation coefficient
+	
+	Returns:
+	- the Pearson Correlation coefficient
+	"""
+	v1 = y1 - torch.mean(y1, axis = 0)
+	v2 = y2 - torch.mean(y2, axis = 0)
+	return torch.sum(v1 * v2, axis = 0) / (torch.sqrt(torch.sum(v1 ** 2, axis = 0)) * torch.sqrt(torch.sum(v2 ** 2, axis= 0)))
+
+def MSE(y1, y2):
+	"""
+	Method to compute the Mean Squared Error between two sequences
+	Args:
+	- y1, y2: the two sequences for whcih we want to compute the Mean Squared Error
+	
+	Returns:
+	- the Mean Squared Error
+	"""
+	return torch.mean((y1 - y2)**2, axis=0)
+
+def RMSE(y1,y2):
+	"""
+	Method to compute the Root Mean Squared Error between two sequences
+	Args:
+	- y1, y2: the two sequences for whcih we want to compute the Root Mean Squared Error
+	
+	Returns:
+	- the Root Mean Squared Error
+	"""
+	return torch.sqrt(MSE(y1,y2))
+
+def MAE(y1, y2):
+	"""
+	Method to compute the Mean Absolute Error between two sequences
+	Args:
+	- y1, y2: the two sequences for whcih we want to compute the Mean Absolute Error
+	
+	Returns:
+	- the Mean Absolute Error
+	"""
+	return torch.mean(torch.abs(y1-y2), axis = 0)
+
+def MAPE(y1, y2):
+	"""
+	Method to compute the Mean Absolute Percentage Error between two sequences
+	Args:
+	- y1, y2: the two sequences for whcih we want to compute the Mean Absolute Percentage Error
+	
+	Returns:
+	- the Mean Absolute Percentage Error
+	"""
+	return torch.mean(torch.abs(y1-y2) / y1, axis=0)
+
+def compute_statistics(stocks, model, path, test_loader, verbose = True):
+	"""
+	Method to collect the overall performance statistics for a particular model
+	Args:
+	- stocks: stocks to be displayed
+	- model: the model to assess the performances
+	- path: the folder path to the models to be loaded
+	- test_loader: the DataLoader over which assessing the performances
+	- verbose: whether or not to print the metrics
+	
+	Returns:
+	void if verbose, otherwise it returns the performance metrics
+	"""
+	mse, rmse, mae, mape, corr  = [],[],[],[],[]
+	for model_path in os.listdir(path):
+		model.load_state_dict(torch.load(path+"/"+model_path,map_location = torch.device(device)))
+		model = model.to(device)
+		test_data, test_labels, _ = next(iter(test_loader))
+		test_data = test_data.to(device)
+		test_labels = test_labels.to(device)
+	
+		with torch.no_grad():
+			predicted_labels = model(test_data)
+		mse.append(MSE(test_labels, predicted_labels))
+		rmse.append(RMSE(test_labels, predicted_labels))
+		mae.append(MAE(test_labels, predicted_labels))
+		mape.append(MAPE(test_labels, predicted_labels))
+		corr.append(PearsonCorr(test_labels, predicted_labels))
+	
+	mse = torch.mean(torch.stack(mse, dim = 0), dim = 0)
+	rmse = torch.mean(torch.stack(rmse, dim = 0), dim = 0)
+	mae = torch.mean(torch.stack(mae, dim = 0), dim = 0)
+	mape = torch.mean(torch.stack(mape, dim = 0), dim = 0)
+	corr = torch.mean(torch.stack(corr, dim = 0), dim = 0)
+	
+	if verbose:
+		for i in range(0, len(stocks),11):
+			print("{0:>9}".format("Stocks")+" | ".join(["{0:>9}".format(s) for s in stocks[i:i+11]]))
+			print("-"*len(stocks[i:i+11])*13)
+			print("{0:>9}".format("MSE")+" | ".join(["{0:>9}".format(round(el,2)) for el in mse.tolist()[i:i+11]]))
+			print("-"*len(stocks[i:i+11])*13)
+			print("{0:>9}".format("RMSE")+" | ".join(["{0:>9}".format(round(el,2)) for el in rmse.tolist()[i:i+11]]))
+			print("-"*len(stocks[i:i+11])*13)
+			print("{0:>9}".format("MAE")+" | ".join(["{0:>9}".format(round(el,3)) for el in mae.tolist()[i:i+11]]))
+			print("-"*len(stocks[i:i+11])*13)
+			print("{0:>9}".format("MAPE")+"% | ".join(["{0:>8}".format(round(el*100,2)) for el in mape.tolist()[i:i+11]])+"%")
+			print("-"*len(stocks[i:i+11])*13)
+			print("{0:>9}".format("Corr")+" | ".join(["{0:>9}".format(round(el,3)) for el in corr.tolist()[i:i+11]]))
+			print("\n\n")
+			
+	else: return mse, rmse, mae, mape, corr
+
+
+def plot_hist_errors(stocks, model_dict, window = 30, pred_window = 30, **kwargs):
+	"""
+	Method to plot distributions of the errors for a model
+	Args:
+	- stocks: the model referred to some stocks
+	- model_dict: a tuple containing the instance of the model and the initialization of the model
+	- window: the specification of the model's window on past samples
+	- pred_window: the specification of the model's prediction window parameter
+	- **kwargs: additional parameters as the specifications of the batch_size and the command to save the plots
+	"""
+
+	batch_size = kwargs['batch_size'] if 'batch_size' in kwargs else 32
+
+	"""
+	Creating sequential iterators with a training window of 3*batch_size days, with a stride = 1
+	"""
+	print("\r")
+	print("Building the loaders", end="")
+
+	dataset = TechnicalPortfolioTimeSeries(components = stocks, window = window, pred_window = pred_window, transform = ToTensor())
+	loader = DataLoader(dataset, batch_size = batch_size, drop_last = True, shuffle = False, num_workers = 0)
+
+	train_loaders, test_loaders = [], []
+	iterator = []
+
+	for i, (batch, labels, _) in enumerate(loader, 0):
+		if len(iterator) != 3:
+			iterator.append((batch, labels, _))
+		else:
+			train_loaders.append(iterator)
+			test_loaders.append([(batch, labels, _)])
+			iterator.pop(0)
+			iterator.append((batch, labels, _))
+
+	"""
+	Defining collections of errors
+	"""
+	
+	fig, axs = plt.subplots(len(stocks), 5, figsize = (30,len(stocks)*15))
+
+	model, path_to_model = model_dict
+
+	stats = OrderedDict({"mae":[], "mape":[], "rmse":[], "mse":[], "corr":[]})
+	
+	#Sampler Parameters
+	lr = kwargs['lr'] if 'lr' in kwargs else 0.0007
+	num_burn_in_steps = kwargs['num_burn_in_steps'] if 'num_burn_in_steps' in kwargs else 300
+	keep_every = kwargs['keep_every'] if 'keep_every' in kwargs else 100
+	nsamples = kwargs['nsamples'] if 'nsamples' in kwargs else 7
+
+
+	for i, train_loader in enumerate(train_loaders,0):
+		print("\r")
+		print("Training and Plotting {}/{}".format(i+1, len(train_loaders)), end="")
+
+		model = model.to(device)
+		model.load_state_dict(torch.load(path_to_model, map_location = torch.device(device)))
+		loss_fn = torch.nn.MSELoss(reduction='sum')
+		lm = LossModule(model,train_loader, loss_fn, N = batch_size*3)
+		SGHMC = SGHMCSampler(lm, num_burn_in_steps=num_burn_in_steps, lr = lr, keep_every=keep_every)
+		SGHMC.sample(nsamples=nsamples)
+
+		os.makedirs('temp_models')
+		for i, set_params in enumerate(SGHMC.sampled_weights):       
+			state_dict = {}
+			for k,(name, param) in enumerate(model.named_parameters()):
+				state_dict[name] = torch.from_numpy(set_params[k])
+			state_dict_it = OrderedDict(state_dict)
+			model.load_state_dict(state_dict_it, strict=False)
+			torch.save(model.state_dict(),"temp_models/model_{}".format(i))
+
+		mse, rmse, mae, mape, corr = compute_statistics(stocks, model, 'temp_models', test_loaders[i], verbose = False)
+
+		shutil.rmtree('temp_models', ignore_errors=True)
+
+		stats["mse"].append(mse)
+		stats["mae"].append(mae)
+		stats["rmse"].append(rmse)
+		stats["mape"].append(mape)
+		stats["corr"].append(corr)
+
+	for s, stock in enumerate(stocks,0):
+		for p, key in enumerate(stats.keys(),0):
+			hist = torch.stack(stats[key], dim=0)
+
+			axs[s,p].grid()
+			axs[s,p].hist(hist[:,s].cpu().numpy(), bins = min(70, len(train_loaders)), edgecolor='k', linewidth=1.2)
+			axs[s,p].text(0.68, 0.04, 'Mean = {}\n Std = {}'.format(round(torch.mean(hist[:,s]).item(),3), round(torch.std(hist[:,s]).item(),3)),
+			style='italic', transform=axs[s,p].transAxes, fontsize = 12, family='fantasy',
+			bbox={'facecolor':'tomato', 'alpha':0.9, 'pad':5})
+
+			axs[s,p].set_title("{}'s {}".format(stock, key))
+
+
+	if 'savefig' in kwargs:
+		plt.savefig("Errors.png")
+
+	plt.show()
