@@ -543,6 +543,10 @@ def plot_predictions_from_files(model_folder, model, stocks, test_loader, datase
 		print("Processed File {} of {}".format(f+1, len(os.listdir(model_folder))),end="")
 	
 	preds = torch.cat(outputs, dim=0)
+	
+	index_true = [datetime.datetime(index[i,2],index[i,1],index[i,0]) for i in range(index.shape[0])]
+	#compute the index up to the last predicted day
+	index_pred = index_true + [index_true[-1] + datetime.timedelta(days=i) for i in range(1,pred_window+1)]
 
 	"""
 	Plot predictions vs. true trend
