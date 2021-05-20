@@ -11,10 +11,15 @@ from ResForkNet import *
 import time
 import datetime
 import matplotlib.pyplot as plt
+from matplotlib import animation, rc
 import os
 import shutil
+from threading
+from queue import Queue, PriorityQueue
+from scipy.signal import argrelextrema
 
 plt.style.use('ggplot')
+rc('animation', html='jshtml')
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -213,61 +218,6 @@ class TechnicalPortfolioTimeSeries(Dataset):
 		index = self.index[idx,:]
 		x,y = self.transform(x,y)
 		return (x,y,index)
-	
-
-def returns(df, **kwargs):
-	"""
-	Input:
-	- df: pandas dataframe with historical prices
-	
-	Returns:
-	A pandas dataframe with added the column return
-	"""
-	df['return'] = (df['adjusted_close'] - df['adjusted_close'].shift(1))/df['adjusted_close'].shift(1)
-	return df
-
-def annualize_vol(returns, n_periods):
-	"""
-	Input:
-	- returns: pandas series or array of returns
-	- n_periods: number of periods composing an year in the df, to annualize the volatility
-	
-	Returns:
-	A pandas series or array of volatilities
-	"""
-	return returns.rolling(window = len(returns), min_periods = 1).std()*(n_periods**0.5)
-
-def annualize_rets(returns, n_periods):
-	"""
-	Method to evaluate the annualized returns given a dataframe of retu
-	Args:
-	- returns: pandas series or array of returns
-	- n_periods: number of periods composing an year in the df, to annualize the returns
-	
-	Returns:
-	A pandas series or array fo returns
-	"""
-	compounded_growth = (1+returns).prod()
-	periods = returns.shape[0]
-	return compounded_growth**(n_periods/periods)-1
-
-
-def sharpe_ratio(returns, riskfree_rate, n_periods):
-	"""
-	Args:
-	- returns: pandas series or array of returns
-	- riskfree_rate: interest rate of risk-free assets
-	- n_periods: number of periods composing an year in the df, to annualize the sharpe_ratio
-	
-	Returns:
-	A pandas series or array of sharpe ratio
-	"""
-	# convert the annual riskfree rate to per period
-	rf_per_period = (1+riskfree_rate)**(1/n_periods)-1
-	excess_ret = returns - rf_per_period
-	ann_ex_ret = annualize_rets(excess_ret, n_periods)
-	ann_vol = annualize_vol(returns, n_periods)
-	return ann_ex_ret/ann_vol
 
 
 
@@ -384,7 +334,7 @@ def download_csv(stocks,*args):
 		merged_df.to_csv('Tech/{}.csv'.format(s))
 		time.sleep(60)
 
-def build_test(test_loader, dataset, window = 30, pred_window = 30, num_f = 60):
+def build_test(test_loader, dataset=None, window = 30, pred_window = 30, num_f = 60, more_days = True):
 	"""
 	Method to build test_data to be predicted
 	Args:
@@ -394,19 +344,20 @@ def build_test(test_loader, dataset, window = 30, pred_window = 30, num_f = 60):
 	- pred_windw: window used for the predictions
 	- num_f: dimensionality of the feature space
 	"""
-	
-	trains = []
-	for i in range(len(dataset.merged_df)-window-pred_window, len(dataset.merged_df)-window):
-		stack = [] 
-		for j in range(0,len(dataset.merged_df.columns), num_f):
-			stack.append(np.transpose(dataset.norm_df[i:window+i, j:j+num_f]))
-
-		stack = np.concatenate(stack, axis = 1)
-		trains.append(stack)
-	new_data = np.array(trains)
 	test_data, test_labels, index = next(iter(test_loader))
 	test_data = test_data.to(device)
-	test_data = torch.cat([test_data, torch.Tensor(new_data).type(torch.FloatTensor).to(device)], axis = 0)
+
+	if more_days:
+		trains = []
+		for i in range(len(dataset.merged_df)-window-pred_window, len(dataset.merged_df)-window):
+			stack = []
+			for j in range(0,len(dataset.merged_df.columns), num_f):
+				stack.append(np.transpose(dataset.norm_df[i:window+i, j:j+num_f]))
+
+			stack = np.concatenate(stack, axis = 1)
+			trains.append(stack)
+		new_data = np.array(trains)
+		test_data = torch.cat([test_data, torch.Tensor(new_data).type(torch.FloatTensor).to(device)], axis = 0)
 
 	return test_data, test_labels, index
 
@@ -502,7 +453,7 @@ def plot_predictions_from_samples(sampled_weights, model, stocks, test_loader, d
 	
 
 
-def plot_predictions_from_files(model_folder, model, stocks, test_loader, dataset, window = 30, pred_window = 30, num_f = 60, show_days = 100, savefig = False):
+def plot_predictions_from_files(model_folder, model, stocks, test_loader, dataset, window = 30, pred_window = 30, num_f = 60, show_days = 100):
 	"""
 	Method to plot predictions from saved models
 	Args:
@@ -543,7 +494,7 @@ def plot_predictions_from_files(model_folder, model, stocks, test_loader, datase
 		print("Processed File {} of {}".format(f+1, len(os.listdir(model_folder))),end="")
 	
 	preds = torch.cat(outputs, dim=0)
-	
+
 	index_true = [datetime.datetime(index[i,2],index[i,1],index[i,0]) for i in range(index.shape[0])]
 	#compute the index up to the last predicted day
 	index_pred = index_true + [index_true[-1] + datetime.timedelta(days=i) for i in range(1,pred_window+1)]
@@ -556,6 +507,38 @@ def plot_predictions_from_files(model_folder, model, stocks, test_loader, datase
 	plot_predictions(stocks, test_labels, preds, index_true, index_pred, show_days, savefig)
 	print("\r", end="")
 
+def get_predictions_from_files(model_folder, model, stocks, test_loader):
+	"""
+	Method to plot predictions from saved models
+	Args:
+	- sampled_weights: collection of sampled models
+	- model: model architecture
+	- stocks: components to be plotted
+	- test_loader: DataLoader containing test_data
+	- dataset: original dataset
+	
+	Returns:
+	- predictions
+	- true_labels
+	- index
+	"""
+
+	test_data, test_labels, index = build_test(test_loader, more_days = False)
+
+	for f, file_model in enumerate(os.listdir(model_folder)):
+		model.load_state_dict(torch.load(model_folder + "/" + file_model, map_location = torch.device(device)))
+		model = model.to(device)
+
+		with torch.no_grad():
+			output = model(test_data)
+		outputs.append(torch.unsqueeze(output,0))
+
+		print("",end="\r")
+		print("Processed File {} of {}".format(f+1, len(os.listdir(model_folder))),end="")
+	
+	preds = torch.cat(outputs, dim=0)
+
+	return preds, test_labels, index
 
 
 """
@@ -770,3 +753,114 @@ def plot_hist_errors(stocks, model_dict, window = 30, pred_window = 30, **kwargs
 		plt.savefig("Errors.png")
 
 	plt.show()
+
+"""
+Backtesting Strategies
+"""
+
+class Trader(threading.Thread):
+	def __init__(self, name, trading_fn,*args):
+		threading.Thread.__init__(self)
+		self.name = name
+		self.trading_fn = trading_fn
+		self.args = args
+
+	def run(self):
+		print("Running trading strategy: %s" %self.name)
+		self.trading_fn(self.args)
+
+
+def ew_portfolio(predictions, true_prices, time_index, stocks, pred_window = 30, budget = 1e5):
+
+	portfolio_history = {}
+	current_portfolio = OrderedDict({s: 0 for s in stocks})
+	entry_points = []
+
+	avg = np.mean(axis = 0)
+	min_p = np.min(preds.cpu().numpy(), axis = 0)
+	max_p = np.max(preds.cpu().numpy(), axis = 0)
+
+	for j, stock in enumerate(stocks):
+		for i in range(len(predictions)):
+			minimum_price = min_p[i: i+pred_window,j]
+			maximum_price = max_p[i: i+pred_window,j]
+			avg_price = avg[i: i+pred_window,j]
+			
+			confidence_score = 1 - (maximum_price - minimum_price)/avg_price
+
+			local_minima = argrelextrema(avg_price, np.less)[0]
+			local_maxima = argrelextrema(avg_price, np.greater)[0]
+
+			for pos in local_minima:
+				if random.uniform(0,1) <= confidence_score[pos]:
+					entry_points.append(
+						(i+pos, "BUY",j)
+					)
+
+			for pos in local_maxima:
+				if random.uniform(0,1) <= confidence_score[pos]:
+					entry_points.append(
+						(i+pos, "SELL", j)
+					)
+
+
+	entry_points.sort(key = lambda x: x["time"][1])
+	events = PriorityQueue()
+
+	for event in entry_points:
+		events.put(event)
+
+	"""
+	Simulation begins
+	"""
+	while budget > 0 and events.qsize()>0:
+
+		event = events.get()
+
+		index_time = event[0]
+		date = time_index[index_time]
+		
+		index_stock = event[2]
+		stock = stocks[index_stock]
+
+		if event[1] == 'BUY':
+			i = stocks.index(stock)
+			ew_value = 
+			min(
+			(np.dot(current_portfolio.values, true_prices[index_time,:]) + budget)/len(stocks) - current_portfolio[stock]*true_prices[index_time,index_stock], 0
+			)
+			num_stocks = min(0, ew_value // true_prices[index_time, index_stock])
+			budget -= num_stocks * true_prices[index_time, index_stock]
+			current_portfolio[stock] += num_stocks
+			portfolio_history[date] = current_portfolio
+
+			#Place either HOLD or CloseBuy
+
+
+		else:
+			i = stocks.index(stock)
+			budget += current_portfolio[stock] * true_prices[event[2], i]
+			current_portfolio[stock] = 0
+			portfolio_history[date] = current_portfolio
+
+			#Place either HOLD or CloseSell 
+
+
+"""
+Animated Pie Chart
+
+import numpy as np
+import matplotlib.pyplot as plt
+fig,ax = plt.subplots()
+explode=[0.01,0.01,0.01,0.01] #pop out each slice from the pie
+def getmepie(i):
+    def absolute_value(val): #turn % back to a number
+        a  = np.round(val/100.*df1.head(i).max().sum(), 0)
+        return int(a)
+    ax.clear()
+    plot = df1.head(i).max().plot.pie(y=df1.columns,autopct=absolute_value, label='',explode = explode, shadow = True)
+    plot.set_title('Total Number of Deaths\n' + str(df1.index[min( i, len(df1.index)-1 )].strftime('%y-%m-%d')), fontsize=12)
+import matplotlib.animation as ani
+animator = ani.FuncAnimation(fig, getmepie, interval = 200)
+plt.show()
+"""
