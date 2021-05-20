@@ -343,6 +343,10 @@ def build_test(test_loader, dataset=None, window = 30, pred_window = 30, num_f =
 	- window: window used as the "memory" of the model
 	- pred_windw: window used for the predictions
 	- num_f: dimensionality of the feature space
+	- more_days: flag to add those days not covered by test labels
+
+	Returns:
+	- test_data, test_labels, index of test_labels 
 	"""
 	test_data, test_labels, index = next(iter(test_loader))
 	test_data = test_data.to(device)
