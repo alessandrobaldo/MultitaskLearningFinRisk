@@ -829,8 +829,7 @@ def ew_portfolio(predictions, true_prices, time_index, stocks, pred_window = 30,
 
 		if event[1] == 'BUY':
 			i = stocks.index(stock)
-			ew_value = 
-			min(
+			ew_value = min(
 			(np.dot(current_portfolio.values, true_prices[index_time,:]) + budget)/len(stocks) - current_portfolio[stock]*true_prices[index_time,index_stock], 0
 			)
 			num_stocks = min(0, ew_value // true_prices[index_time, index_stock])
