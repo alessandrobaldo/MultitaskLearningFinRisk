@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib import animation, rc
 import os
 import shutil
-from threading
+import threading
 from queue import Queue, PriorityQueue
 from scipy.signal import argrelextrema
 
