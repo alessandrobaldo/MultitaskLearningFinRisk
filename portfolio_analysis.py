@@ -186,9 +186,9 @@ def summary_stats(r, riskfree_rate=0.03):
 	"""
 	Return a DataFrame that contains aggregated summary stats for the returns in the columns of r
 	"""
-	ann_r = r.aggregate(annualize_rets, periods_per_year=12)
-	ann_vol = r.aggregate(annualize_vol, periods_per_year=12)
-	ann_sr = r.aggregate(sharpe_ratio, riskfree_rate=riskfree_rate, periods_per_year=12)
+	ann_r = r.aggregate(annualize_rets)
+	ann_vol = r.aggregate(annualize_vol)
+	ann_sr = r.aggregate(sharpe_ratio, riskfree_rate=riskfree_rate)
 	dd = r.aggregate(lambda r: drawdown(r).Drawdown.min())
 	skew = r.aggregate(skewness)
 	kurt = r.aggregate(kurtosis)
