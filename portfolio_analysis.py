@@ -14,8 +14,8 @@ def returns(df, **kwargs):
 	Returns:
 	A pandas dataframe with added the column return
 	"""
-	return_df = (df - df.shift(1))/df.shift(1)
-	return df
+	return_df = (df - df.shift(1))/df
+	return return_df
 
 def annualize_vol(returns, n_periods=250):
 	"""
@@ -26,7 +26,7 @@ def annualize_vol(returns, n_periods=250):
 	Returns:
 	A pandas series or array of volatilities
 	"""
-	return returns.rolling(window = len(returns), min_periods = 1).std()*(n_periods**0.5)
+	return (returns.rolling(window = len(returns), min_periods = 1).std()*(n_periods**0.5)).dropna()
 
 def annualize_rets(returns, n_periods=250):
 	"""
@@ -43,7 +43,7 @@ def annualize_rets(returns, n_periods=250):
 	return compounded_growth**(n_periods/periods)-1
 
 
-def sharpe_ratio(returns, riskfree_rate, n_periods=250):
+def sharpe_ratio(returns, riskfree_rate=0.03, n_periods=250):
 	"""
 	Args:
 	- returns: pandas series or array of returns
