@@ -526,8 +526,16 @@ def get_predictions_from_files(model_folder, model, stocks, test_loader):
 	- true_labels
 	- index
 	"""
-
+	print("\r", end="")
+	print("Building test data", end="")
 	test_data, test_labels, index = build_test(test_loader, more_days = False)
+
+	"""
+	Compute the predictions
+	"""
+	print("\r", end="")
+	print("Computing the predictions", end="")
+	outputs = []
 
 	for f, file_model in enumerate(os.listdir(model_folder)):
 		model.load_state_dict(torch.load(model_folder + "/" + file_model, map_location = torch.device(device)))
