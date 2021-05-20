@@ -508,7 +508,7 @@ def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbo
 	estimation_window: the window to use to estimate parameters
 	weighting: the weighting scheme to use, must be a function that takes "r", and a variable number of keyword-value arguments
 	"""
-	n_periods = r.shape[0]
+	n_periods = r_true.shape[0]
 	# return windows
 	windows = [(start, start+estimation_window) for start in range(n_periods-estimation_window)]
 	weights_true = [weighting(r_true.iloc[win[0]:win[1]], **kwargs) for win in windows]
