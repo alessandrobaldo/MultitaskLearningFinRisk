@@ -507,7 +507,7 @@ def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbo
 	weighting: the weighting scheme to use, must be a function that takes "r", and a variable number of keyword-value arguments
 	"""
 	print("\r", end="")
-	print("Starting backtesting on {}".format(weight_ew.__name__))
+	print("Starting backtesting on {}".format(weighting.__name__), end="")
 	n_periods = r_true.shape[0]
 	# return windows
 	windows = [(start, start+estimation_window) for start in range(n_periods-estimation_window)]
