@@ -26,7 +26,7 @@ def annualize_vol(returns, n_periods=250):
 	Returns:
 	A pandas series or array of volatilities
 	"""
-	return (returns.rolling(window = len(returns), min_periods = 1).std()*(n_periods**0.5)).dropna()
+	return returns.std()*(n_periods**0.5)
 
 def annualize_rets(returns, n_periods=250):
 	"""
@@ -435,8 +435,6 @@ def proportional_prior(sigma, tau, p):
 	# Make a diag matrix from the diag elements of Omega
 	return pd.DataFrame(np.diag(np.diag(helit_omega.values)),index=p.index, columns=p.index)
 
-from numpy.linalg import inv
-
 def bl(w_prior, sigma_prior, p, q,
 				omega=None,
 				delta=2.5, tau=.02):
@@ -517,7 +515,7 @@ def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbo
 	weights_true = pd.DataFrame(weights_true, index=r_true.iloc[estimation_window:].index, columns=r_true.columns)
 	weights_pred = pd.DataFrame(weights_pred, index=r_pred.iloc[estimation_window:].index, columns=r_pred.columns)
 	returns_true = (weights_true * r_true).sum(axis="columns",  min_count=1) #mincount is to generate NAs if all inputs are NAs
-	returns_pred = (weights_pred * r_pred).sum(axis="columns",  min_count=1)
+	returns_pred = (weights_pred * r_true).sum(axis="columns",  min_count=1)
 	return returns_true, returns_pred
 	
 
