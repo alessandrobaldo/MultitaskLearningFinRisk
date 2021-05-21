@@ -506,6 +506,8 @@ def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbo
 	estimation_window: the window to use to estimate parameters
 	weighting: the weighting scheme to use, must be a function that takes "r", and a variable number of keyword-value arguments
 	"""
+	print("\r", end="")
+	print("Starting backtesting on {}".format(weight_ew.__name__))
 	n_periods = r_true.shape[0]
 	# return windows
 	windows = [(start, start+estimation_window) for start in range(n_periods-estimation_window)]
@@ -554,19 +556,23 @@ def plot_portfolio(true_returns, pred_returns, pred_window = 30, savefig=False):
 	rets = get_portfolio(true_returns, pred_returns, pred_window = 30)
 	cum_rets = (1+rets).cumprod()
 
-	fig, axs = plt.subplots(rets.columns // 2, 1, figsize = (30, (rets.columns// 2)*15))
+	fig, axs = plt.subplots(len(rets.columns) // 2, 1, figsize = (30, (len(rets.columns) // 2)*15))
 
 	axs[0].plot(true_returns.index, cum_rets["EW_true"], label="True")
-	axs[0].plot(true_returns.index, cum_rets["Ew_pred"], label="Pred")
+	axs[0].plot(true_returns.index, cum_rets["EW_pred"], label="Pred")
+	axs[0].legend()
 
 	axs[1].plot(true_returns.index, cum_rets["GMV_sample_true"], label="True")
 	axs[1].plot(true_returns.index, cum_rets["GMV_sample_pred"], label="Pred")
+	axs[1].legend()
 
 	axs[2].plot(true_returns.index, cum_rets["GMV_cc_true"], label="True")
 	axs[2].plot(true_returns.index, cum_rets["GMV_cc_pred"], label="Pred")
+	axs[2].legend()
 
 	axs[3].plot(true_returns.index, cum_rets["GMV_shrinkage_true"], label="True")
 	axs[3].plot(true_returns.index, cum_rets["GMV_shrinkage_pred"], label="Pred")
+	axs[3].legend()
 
 	plt.show()
 
