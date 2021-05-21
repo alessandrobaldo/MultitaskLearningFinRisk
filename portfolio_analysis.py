@@ -4,6 +4,7 @@ from numpy.linalg import inv
 from scipy.optimize import minimize
 import scipy.stats
 from scipy.stats import norm
+import matplotlib.pyplot as plt
 
 
 def returns(df, **kwargs):
