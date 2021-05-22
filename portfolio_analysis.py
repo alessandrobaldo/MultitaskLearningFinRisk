@@ -5,6 +5,7 @@ from scipy.optimize import minimize
 import scipy.stats
 from scipy.stats import norm
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 
 
 def returns(df, **kwargs):
@@ -509,7 +510,7 @@ def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbo
 	"""
 	print("\r", end="")
 	print("Starting backtesting on {} {}".\
-		format(weighting.__name__, kwargs["cov_estimator"] if "cov_estimator" in kwargs else ""), end="")
+		format(weighting.__name__, kwargs["cov_estimator"].__name__ if "cov_estimator" in kwargs else ""), end="")
 	n_periods = r_true.shape[0]
 	# return windows
 	windows = [(start, start+estimation_window) for start in range(n_periods-estimation_window)]
@@ -560,47 +561,72 @@ def get_portfolio(true_returns, pred_returns, pred_window = 30):
 def get_summary_stats(portfolio):
 	return summary_stats(portfolio.dropna())
 
+
 def plot_portfolio(portfolio_rets, portfolio_weights, savefig=False):
+    
+    
+    cum_rets = (1+portfolio_rets).cumprod()
 
-	cum_rets = (1+portfolio_rets).cumprod()
+    #fig, axs = plt.subplots(len(portfolio_rets.columns) // 2, 2, figsize = (30, (len(portfolio_rets.columns) // 2)*7))
+    fig = plt.figure(figsize=(30, (len(portfolio_rets.columns) // 2)*7))
+    gs = gridspec.GridSpec(len(portfolio_rets.columns) // 2, 3)
 
-	fig, axs = plt.subplots(len(portfolio_rets.columns) // 2, 1, figsize = (30, (len(portfolio_rets.columns) // 2)*15))
-
-	ax = fig.add_subplot(4,2,1)
-	ax.plot(true_returns.index, cum_rets["EW_true"], label="True")
-	ax.plot(true_returns.index, cum_rets["EW_pred"], label="Pred")
-	ax.legend()
-
-	#ax = fig.add_subplot(4,2,2)
-
-	axs[0].set_title("Equally-Weighted Portfolio")
-
-	ax = fig.add_subplot(4,2,3)
-	ax.plot(true_returns.index, cum_rets["GMV_sample_true"], label="True")
-	ax.plot(true_returns.index, cum_rets["GMV_sample_pred"], label="Pred")
-	ax.legend()
-
-	#ax = fig.add_subplot(4,2,4)
-
-	axs[1].set_title("Global Minimum Variance Portfolio with Sample Covariance Matrix")
-
-	ax = fig.add_subplot(4,2,5)
-	ax.plot(true_returns.index, cum_rets["GMV_cc_true"], label="True")
-	ax.plot(true_returns.index, cum_rets["GMV_cc_pred"], label="Pred")
-	ax.legend()
-
-	#ax = fig.add_subplot(4,2,6)
-
-	axs[2].set_title("Global Minimum Variance Portfolio with Constant Correlation Matrix")
-
-	ax = fig.add_subplot(4,2,7)
-	ax.plot(true_returns.index, cum_rets["GMV_shrinkage_true"], label="True")
-	ax.plot(true_returns.index, cum_rets["GMV_shrinkage_pred"], label="Pred")
-	ax.legend()
-
-	#ax = fig.add_subplot(4,2,8)
-	
-	axs[3].set_title("Global Minimum Variance Portfolio with Shrinkage Covariance Matrix")
-
-	plt.show()
+    ax00 = plt.subplot(gs[0,0])
+    ax00.plot(portfolio_rets.index, cum_rets["EW_true"], label="True")
+    ax00.plot(portfolio_rets.index, cum_rets["EW_pred"], label="Pred")
+    ax00.xaxis.set_tick_params(rotation=45)
+    ax00.legend()
+    ax00.set_title("Equally-Weighted Portfolio Returns")
+    
+    ax01 = plt.subplot(gs[0,1:])
+    ax01.bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["EW_true"].iloc[-1], width = 1.2, label = "True")
+    ax01.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["EW_pred"].iloc[-1], width = 1.2, label = "Pred")
+    ax01.set_xticks([i for i in range(0,len(stocks)*4,4)])
+    ax01.set_xticklabels(stocks, rotation = 45)
+    ax01.legend()
+    
+    ax10 = plt.subplot(gs[1,0])
+    ax10.plot(portfolio_rets.index, cum_rets["GMV_sample_true"], label="True")
+    ax10.plot(portfolio_rets.index, cum_rets["GMV_sample_pred"], label="Pred")
+    ax10.xaxis.set_tick_params(rotation=45)
+    ax10.legend()
+    ax10.set_title("Global Minimum Variance Portfolio Returns with Sample Covariance Matrix")
+    
+    ax11 = plt.subplot(gs[1,1:])
+    ax11.bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_sample_true"].iloc[-1], width = 1.2, label = "True")
+    ax11.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_sample_pred"].iloc[-1], width = 1.2, label = "Pred")
+    ax11.set_xticks([i for i in range(0,len(stocks)*4,4)])
+    ax11.set_xticklabels(stocks, rotation = 45)
+    ax11.legend()
+    
+    ax20 = plt.subplot(gs[2,0])
+    ax20.plot(portfolio_rets.index, cum_rets["GMV_cc_true"], label="True")
+    ax20.plot(portfolio_rets.index, cum_rets["GMV_cc_pred"], label="Pred")
+    ax20.xaxis.set_tick_params(rotation=45)
+    ax20.legend()
+    ax20.set_title("Global Minimum Variance Portfolio Returns with Constant Correlation Matrix")
+    
+    ax21 = plt.subplot(gs[2,1:])
+    ax21.bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_cc_true"].iloc[-1], width = 1.2, label = "True")
+    ax21.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_cc_pred"].iloc[-1], width = 1.2, label = "Pred")
+    ax21.set_xticks([i for i in range(0,len(stocks)*4,4)])
+    ax21.set_xticklabels(stocks, rotation = 45)
+    ax21.legend()
+    
+    ax30 = plt.subplot(gs[3,0])
+    ax30.plot(portfolio_rets.index, cum_rets["GMV_shrinkage_true"], label="True")
+    ax30.plot(portfolio_rets.index, cum_rets["GMV_shrinkage_pred"], label="Pred")
+    ax30.xaxis.set_tick_params(rotation=45)
+    ax30.legend()
+    ax30.set_title("Global Minimum Variance Portfolio Returns with Shrinkage Covariance Matrix")
+    
+    ax31 = plt.subplot(gs[3,1:])
+    ax31.bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_shrinkage_true"].iloc[-1], width = 1.2, label = "True")
+    ax31.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_shrinkage_pred"].iloc[-1], width = 1.2, label = "Pred")
+    ax31.set_xticks([i for i in range(0,len(stocks)*4,4)])
+    ax31.set_xticklabels(stocks, rotation = 45)
+    ax31.legend()
+    
+    fig.tight_layout()
+    plt.show()
 
