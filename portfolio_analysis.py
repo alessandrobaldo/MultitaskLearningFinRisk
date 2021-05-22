@@ -508,7 +508,8 @@ def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbo
 	weighting: the weighting scheme to use, must be a function that takes "r", and a variable number of keyword-value arguments
 	"""
 	print("\r", end="")
-	print("Starting backtesting on {}".format(weighting.__name__), end="")
+	print("Starting backtesting on {} {}".\
+		format(weighting.__name__, kwargs["cov_estimator"] if "cov_estimator" in kwargs else ""), end="")
 	n_periods = r_true.shape[0]
 	# return windows
 	windows = [(start, start+estimation_window) for start in range(n_periods-estimation_window)]
@@ -519,25 +520,25 @@ def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbo
 	weights_pred = pd.DataFrame(weights_pred, index=r_pred.iloc[estimation_window:].index, columns=r_pred.columns)
 	returns_true = (weights_true * r_true).sum(axis="columns",  min_count=1) #mincount is to generate NAs if all inputs are NAs
 	returns_pred = (weights_pred * r_true).sum(axis="columns",  min_count=1)
-	return returns_true, returns_pred
+	return returns_true, returns_pred, weights_true, weights_pred
 	
 
 def get_portfolio(true_returns, pred_returns, pred_window = 30):
 
 	#EW porfolio
-	ew_true, ew_pred = backtest_ws(
+	ew_true, ew_pred, ew_w_true, ew_w_pred = backtest_ws(
 		true_returns, pred_returns, estimation_window = pred_window, weighting = weight_ew)
 
 	#GMV Sample Covariance portfolio
-	gmv_sample_true, gmv_sample_pred = backtest_ws(
+	gmv_sample_true, gmv_sample_pred, gmv_sample_w_true, gmv_sample_w_pred = backtest_ws(
 		true_returns, pred_returns, estimation_window = pred_window, weighting=weight_gmv, cov_estimator = sample_cov)
 
 	#GMV Constant Correlation portfolio
-	gmv_cc_true, gmv_cc_pred = backtest_ws(
+	gmv_cc_true, gmv_cc_pred, gmv_cc_w_true, gmv_cc_w_pred = backtest_ws(
 		true_returns, pred_returns, estimation_window = pred_window, weighting=weight_gmv, cov_estimator = cc_cov)
 
 	#GMV Shrinkage Correlation portfolio
-	gmv_shrink_true, gmv_shrink_pred = backtest_ws(
+	gmv_shrink_true, gmv_shrink_pred, gmv_shrink_w_true, gmv_shrink_w_pred = backtest_ws(
 		true_returns, pred_returns, estimation_window = pred_window, weighting=weight_gmv, cov_estimator = shrinkage_cov)
 
 	return pd.DataFrame(
@@ -547,33 +548,59 @@ def get_portfolio(true_returns, pred_returns, pred_window = 30):
 		"GMV_cc_true": gmv_cc_true, "GMV_cc_pred": gmv_cc_pred,
 		"GMV_shrinkage_true": gmv_shrink_true, "GMV_shrinkage_pred": gmv_shrink_pred
 		}
+		), pd.DataFrame(
+		{
+		"EW_true": ew_w_true, "EW_pred": ew_w_pred,
+		"GMV_sample_true": gmv_sample_w_true, "GMV_sample_pred": gmv_sample_w_pred,
+		"GMV_cc_true": gmv_cc_w_true, "GMV_cc_pred": gmv_cc_w_pred,
+		"GMV_shrinkage_true": gmv_shrink_w_true, "GMV_shrinkage_pred": gmv_shrink_w_pred
+		}
 		)
 
-def get_summary_stats(true_returns, pred_returns, pred_window = 30):
-	return summary_stats(get_portfolio(true_returns, pred_returns, pred_window).dropna())
+def get_summary_stats(portfolio):
+	return summary_stats(portfolio.dropna())
 
-def plot_portfolio(true_returns, pred_returns, pred_window = 30, savefig=False):
+def plot_portfolio(portfolio_rets, portfolio_weights, savefig=False):
 
-	rets = get_portfolio(true_returns, pred_returns, pred_window = 30)
-	cum_rets = (1+rets).cumprod()
+	cum_rets = (1+portfolio_rets).cumprod()
 
-	fig, axs = plt.subplots(len(rets.columns) // 2, 1, figsize = (30, (len(rets.columns) // 2)*15))
+	fig, axs = plt.subplots(len(portfolio_rets.columns) // 2, 1, figsize = (30, (len(portfolio_rets.columns) // 2)*15))
 
-	axs[0].plot(true_returns.index, cum_rets["EW_true"], label="True")
-	axs[0].plot(true_returns.index, cum_rets["EW_pred"], label="Pred")
-	axs[0].legend()
+	ax = fig.add_subplot(4,2,1)
+	ax.plot(true_returns.index, cum_rets["EW_true"], label="True")
+	ax.plot(true_returns.index, cum_rets["EW_pred"], label="Pred")
+	ax.legend()
 
-	axs[1].plot(true_returns.index, cum_rets["GMV_sample_true"], label="True")
-	axs[1].plot(true_returns.index, cum_rets["GMV_sample_pred"], label="Pred")
-	axs[1].legend()
+	#ax = fig.add_subplot(4,2,2)
 
-	axs[2].plot(true_returns.index, cum_rets["GMV_cc_true"], label="True")
-	axs[2].plot(true_returns.index, cum_rets["GMV_cc_pred"], label="Pred")
-	axs[2].legend()
+	axs[0].set_title("Equally-Weighted Portfolio")
 
-	axs[3].plot(true_returns.index, cum_rets["GMV_shrinkage_true"], label="True")
-	axs[3].plot(true_returns.index, cum_rets["GMV_shrinkage_pred"], label="Pred")
-	axs[3].legend()
+	ax = fig.add_subplot(4,2,3)
+	ax.plot(true_returns.index, cum_rets["GMV_sample_true"], label="True")
+	ax.plot(true_returns.index, cum_rets["GMV_sample_pred"], label="Pred")
+	ax.legend()
+
+	#ax = fig.add_subplot(4,2,4)
+
+	axs[1].set_title("Global Minimum Variance Portfolio with Sample Covariance Matrix")
+
+	ax = fig.add_subplot(4,2,5)
+	ax.plot(true_returns.index, cum_rets["GMV_cc_true"], label="True")
+	ax.plot(true_returns.index, cum_rets["GMV_cc_pred"], label="Pred")
+	ax.legend()
+
+	#ax = fig.add_subplot(4,2,6)
+
+	axs[2].set_title("Global Minimum Variance Portfolio with Constant Correlation Matrix")
+
+	ax = fig.add_subplot(4,2,7)
+	ax.plot(true_returns.index, cum_rets["GMV_shrinkage_true"], label="True")
+	ax.plot(true_returns.index, cum_rets["GMV_shrinkage_pred"], label="Pred")
+	ax.legend()
+
+	#ax = fig.add_subplot(4,2,8)
+	
+	axs[3].set_title("Global Minimum Variance Portfolio with Shrinkage Covariance Matrix")
 
 	plt.show()
 
