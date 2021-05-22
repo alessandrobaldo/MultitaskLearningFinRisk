@@ -498,9 +498,7 @@ def w_msr(sigma, mu, scale=True):
 		w = w/sum(w) # fix: this assumes all w is +ve
 	return w
 
-"""
-Plots
-"""
+
 def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbose=False, **kwargs):
 	"""
 	Backtests a given weighting scheme, given some parameters:
@@ -513,12 +511,13 @@ def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbo
 		format(weighting.__name__, kwargs["cov_estimator"].__name__ if "cov_estimator" in kwargs else ""), end="")
 	n_periods = r_true.shape[0]
 	# return windows
-	windows = [(start, start+estimation_window) for start in range(n_periods-estimation_window)]
+	windows = [(start-30, start, start + estimation_window) for start in range(30, n_periods-estimation_window)]
+
 	weights_true = [weighting(r_true.iloc[win[0]:win[1]], **kwargs) for win in windows]
-	weights_pred = [weighting(r_pred.iloc[win[0]:win[1]], **kwargs) for win in windows]
+	weights_pred = [weighting(pd.concat([r_true.iloc[win[0]:win[1]],r_pred.iloc[win[1]:win[2]]]), **kwargs) for win in windows]
 	# convert List of weights to DataFrame
-	weights_true = pd.DataFrame(weights_true, index=r_true.iloc[estimation_window:].index, columns=r_true.columns)
-	weights_pred = pd.DataFrame(weights_pred, index=r_pred.iloc[estimation_window:].index, columns=r_pred.columns)
+	weights_true = pd.DataFrame(weights_true, index=r_true.iloc[30:].index, columns=r_true.columns)
+	weights_pred = pd.DataFrame(weights_pred, index=r_pred.iloc[30:].index, columns=r_pred.columns)
 	returns_true = (weights_true * r_true).sum(axis="columns",  min_count=1) #mincount is to generate NAs if all inputs are NAs
 	returns_pred = (weights_pred * r_true).sum(axis="columns",  min_count=1)
 	return returns_true, returns_pred, weights_true, weights_pred
@@ -562,7 +561,7 @@ def get_summary_stats(portfolio):
 
 
 def plot_portfolio(portfolio_rets, portfolio_weights, savefig=False):
-	
+	stocks = portfolio_weights["EW_true"].columns.to_list()
 	cum_rets = (1+portfolio_rets).cumprod()
 
 	fig = plt.figure(figsize=(30, (len(portfolio_rets.columns) // 2)*7))
@@ -580,7 +579,7 @@ def plot_portfolio(portfolio_rets, portfolio_weights, savefig=False):
 	ax01.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["EW_pred"].iloc[-1], width = 1.2, label = "Pred")
 	ax01.set_xticks([i for i in range(0,len(stocks)*4,4)])
 	ax01.set_xticklabels(stocks, rotation = 45)
-	ax30.set_title("Weighted Components of the EW Portfolio")
+	ax01.set_title("Weighted Components of the EW Portfolio")
 	ax01.legend()
 	
 	ax10 = plt.subplot(gs[1,0])
@@ -595,7 +594,7 @@ def plot_portfolio(portfolio_rets, portfolio_weights, savefig=False):
 	ax11.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_sample_pred"].iloc[-1], width = 1.2, label = "Pred")
 	ax11.set_xticks([i for i in range(0,len(stocks)*4,4)])
 	ax11.set_xticklabels(stocks, rotation = 45)
-	ax30.set_title("Weighted Components of the GMV Portfolio with Sample Correlation Matrix")
+	ax11.set_title("Weighted Components of the GMV Portfolio with Sample Correlation Matrix")
 	ax11.legend()
 	
 	ax20 = plt.subplot(gs[2,0])
@@ -610,7 +609,7 @@ def plot_portfolio(portfolio_rets, portfolio_weights, savefig=False):
 	ax21.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_cc_pred"].iloc[-1], width = 1.2, label = "Pred")
 	ax21.set_xticks([i for i in range(0,len(stocks)*4,4)])
 	ax21.set_xticklabels(stocks, rotation = 45)
-	ax30.set_title("Weighted Components of the GMV Portfolio with Constant Correlation Matrix")
+	ax21.set_title("Weighted Components of the GMV Portfolio with Constant Correlation Matrix")
 	ax21.legend()
 	
 	ax30 = plt.subplot(gs[3,0])
@@ -625,11 +624,10 @@ def plot_portfolio(portfolio_rets, portfolio_weights, savefig=False):
 	ax31.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_shrinkage_pred"].iloc[-1], width = 1.2, label = "Pred")
 	ax31.set_xticks([i for i in range(0,len(stocks)*4,4)])
 	ax31.set_xticklabels(stocks, rotation = 45)
-	ax30.set_title("Weighted Components of the GMV Portfolio with Shrinkage Covariance Matrix")
+	ax31.set_title("Weighted Components of the GMV Portfolio with Shrinkage Covariance Matrix")
 	ax31.legend()
 	
 	fig.tight_layout()
 	if savefig:
 		plt.savefig("PortfolioPerformances.png")
 	plt.show()
-
