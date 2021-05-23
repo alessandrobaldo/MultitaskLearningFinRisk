@@ -458,7 +458,7 @@ def plot_predictions_from_samples(sampled_weights, model, stocks, test_loader, d
 	
 
 
-def plot_predictions_from_files(model_folder, model, stocks, test_loader, dataset, window = 30, pred_window = 30, num_f = 60, show_days = 100):
+def plot_predictions_from_files(model_folder, model, stocks, test_loader, dataset, window = 30, pred_window = 30, num_f = 60, show_days = 100, savefig = False):
 	"""
 	Method to plot predictions from saved models
 	Args:
@@ -500,7 +500,7 @@ def plot_predictions_from_files(model_folder, model, stocks, test_loader, datase
 	
 	preds = torch.cat(outputs, dim=0)
 
-	index_true = [datetime.datetime(index[i,2],index[i,1],index[i,0]) for i in range(index.shape[0])]
+	index_true = index
 	#compute the index up to the last predicted day
 	index_pred = index_true + [index_true[-1] + datetime.timedelta(days=i) for i in range(1,pred_window+1)]
 
