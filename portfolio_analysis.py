@@ -5,9 +5,11 @@ from scipy.optimize import minimize
 import scipy.stats
 from scipy.stats import norm
 import matplotlib.pyplot as plt
-from matplotlib import gridspec
-import matplotlib.patches as mpatches
-from celluloid import Camera
+#from matplotlib import gridspec
+#import matplotlib.patches as mpatches
+#from celluloid import Camera
+import plotly.express as px
+px.defaults.template = "ggplot2"
 
 def returns(df, **kwargs):
 	"""
@@ -550,17 +552,146 @@ def get_portfolio(true_returns, pred_returns, pred_window = 30):
 		"GMV_shrinkage_true": gmv_shrink_true, "GMV_shrinkage_pred": gmv_shrink_pred
 		}
 		),{
-		"EW_true": ew_w_true, "EW_pred": ew_w_pred,
-		"GMV_sample_true": gmv_sample_w_true, "GMV_sample_pred": gmv_sample_w_pred,
-		"GMV_cc_true": gmv_cc_w_true, "GMV_cc_pred": gmv_cc_w_pred,
-		"GMV_shrinkage_true": gmv_shrink_w_true, "GMV_shrinkage_pred": gmv_shrink_w_pred
+		"EW": {"True": ew_w_true, "Pred": ew_w_pred},
+		"GMV_sample": {"True": gmv_sample_w_true, "Pred": gmv_sample_w_pred},
+		"GMV_cc": {"True": gmv_cc_w_true, "Pred": gmv_cc_w_pred},
+		"GMV_shrinkage": {"True": gmv_shrink_w_true, "Pred": gmv_shrink_w_pred}
 		}
 		
 
-def get_summary_stats(portfolio):
-	return summary_stats(portfolio.dropna())
+def get_summary_stats(portfolio_rets):
+	return summary_stats(portfolio_rets.dropna())
+
+def plot_portfolio_rets(portfolio_rets, savefig=False):
+	cum_rets = (1+portfolio_rets).cumprod()
+	fig, axs = plt.subplots(2,2,figsize=(25, 25))
+
+	axs[0,0].plot(portfolio_rets.index, cum_rets["EW_true"], color='#F8766D', label = "True")
+	axs[0,0].plot(portfolio_rets.index, cum_rets["EW_pred"], color='#619CFF', label="Pred")
+	axs[0,0].xaxis.set_tick_params(rotation=45)
+	axs[0,0].legend()
+	axs[0,0].set_title("Equally-Weighted (EW) Portfolio Returns")
 
 
+	axs[0,1].plot(portfolio_rets.index, cum_rets["GMV_sample_true"], color='#F8766D', label = "True")
+	axs[0,1].plot(portfolio_rets.index, cum_rets["GMV_sample_pred"], color='#619CFF', label = "Pred")
+	axs[0,1].xaxis.set_tick_params(rotation=45)
+	axs[0,1].legend()
+	axs[0,1].set_title("Global Minimum Variance (GMV) Portfolio Returns with Sample Covariance Matrix")
+
+	axs[1,0].plot(portfolio_rets.index, cum_rets["GMV_cc_true"], color='#F8766D', label = "True")
+	axs[1,0].plot(portfolio_rets.index, cum_rets["GMV_cc_pred"], color='#619CFF', label = "Pred")
+	axs[1,0].xaxis.set_tick_params(rotation=45)
+	axs[1,0].legend()
+	axs[1,0].set_title("Global Minimum Variance (GMV) Portfolio Returns with Constant Covariance Matrix")
+
+	axs[1,1].plot(portfolio_rets.index, cum_rets["GMV_shrinkage_true"], color='#F8766D', label = "True")
+	axs[1,1].plot(portfolio_rets.index, cum_rets["GMV_shrinkage_pred"], color='#619CFF', label = "Pred")
+	axs[1,1].xaxis.set_tick_params(rotation=45)
+	axs[1,1].legend()
+	axs[1,1].set_title("Global Minimum Variance (GMV) Portfolio Returns with Shrinkage Covariance Matrix")
+
+	if savefig:
+		plt.savefig("Portfolio_returns.png")
+
+	plt.show()
+
+
+def plot_portfolio_weights(portfolio_weights):
+
+	weights_df = None
+
+	for scheme in portfolio_weights.keys():
+		print("\r", end="")
+		print("Processing {} weighting scheme".format(scheme), end="")
+		dfs = []
+		for sub in portfolio_weights[scheme].keys():
+			curr_df = portfolio_weights[scheme][sub].copy()
+			curr_df.columns = [sub+col for col in curr_df.columns]
+			curr_df['date'] = curr_df.apply(lambda x: x.name.strftime("%Y/%m/%d"), axis=1)
+			dfs.append(
+				pd.wide_to_long(curr_df, stubnames = sub, i='date', j='stock', suffix=r'\w+')
+			)
+			
+		merged_df = dfs[0].merge(dfs[1], left_index = True, right_index = True)
+		merged_df['scheme'] = scheme
+		merged_df = merged_df.reset_index()
+		
+		if weights_df is not None:
+			weights_df = pd.concat([weights_df, merged_df], ignore_index = True)
+		else:
+			weights_df = merged_df.copy()
+
+
+	fig = px.bar(weights_df, x='stock', y=['True', 'Pred'], color_discrete_map= {'True':'#F8766D','Pred':'#619CFF'},
+			animation_frame='date',range_y=[0,1], facet_row='scheme', barmode="group", height = 1000, width = 1500)
+	fig.update_xaxes(type='category')
+	fig.update_layout(
+		title='Portfolio allocations',
+		xaxis=dict(
+			title='Components of the Portfolio',
+			titlefont_size=16,
+			tickfont_size=14,
+			tickangle = -45
+		),
+		yaxis1=dict(title='Weight',titlefont_size=16,tickfont_size=14),
+		yaxis2=dict(title='Weight',titlefont_size=16,tickfont_size=14),
+		yaxis3=dict(title='Weight',titlefont_size=16,tickfont_size=14),
+		yaxis4=dict(title='Weight',titlefont_size=16,tickfont_size=14),
+		
+		bargap=0.35, # gap between bars of adjacent location coordinates.
+		bargroupgap=0.1, # gap between bars of the same location coordinate.
+		hovermode = 'closest',
+		sliders = [{
+			"active": 0,
+			"yanchor": "top",
+			"xanchor": "left",
+			'tickcolor':'white',
+			"currentvalue": {
+				"font": {"size": 14},
+				"prefix": "Date:",
+				"visible": True,
+				"xanchor": "right"
+			},
+			"transition": {"duration": 300, "easing": "cubic-in-out"},
+			"pad": {"b": 10, "t": 100},
+			"len": 0.9,
+			"x": 0.1,
+			"y": 0,
+			"steps": []
+		}],
+		updatemenus = [{
+				"buttons": [
+					{
+						"args": [None, {"frame": {"duration": 500, "redraw": False},
+										"fromcurrent": True, "transition": {"duration": 300,
+																			"easing": "quadratic-in-out"}}],
+						"label": "Play",
+						"method": "animate"
+					},
+					{
+						"args": [[None], {"frame": {"duration": 0, "redraw": False},
+										  "mode": "immediate",
+										  "transition": {"duration": 0}}],
+						"label": "Pause",
+						"method": "animate"
+					}
+				],
+				"direction": "left",
+				"pad": {"r": 10, "t": 100},
+				"showactive": False,
+				"type": "buttons",
+				"x": 0.07,
+				"xanchor": "right",
+				"y": 0,
+				"yanchor": "top"
+			}]
+	)
+	
+	fig.show()
+		
+
+"""
 def plot_portfolio(portfolio_rets, portfolio_weights, savefig=False):
 	stocks = portfolio_weights["EW_true"].columns.to_list()
 	cum_rets = (1+portfolio_rets).cumprod()
@@ -667,3 +798,4 @@ def plot_portfolio(portfolio_rets, portfolio_weights, savefig=False):
 		anim.save("PortfolioEvolution.mp4")
 
 	return anim
+"""
