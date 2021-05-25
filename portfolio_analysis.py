@@ -6,6 +6,7 @@ import scipy.stats
 from scipy.stats import norm
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
+import matplotlib.patches as mpatches
 from celluloid import Camera
 
 def returns(df, **kwargs):
@@ -564,77 +565,105 @@ def plot_portfolio(portfolio_rets, portfolio_weights, savefig=False):
 	stocks = portfolio_weights["EW_true"].columns.to_list()
 	cum_rets = (1+portfolio_rets).cumprod()
 
-	fig = plt.figure(figsize=(30, (len(portfolio_rets.columns) // 2)*7))
+	fig, axs = plt.subplots(4,2,figsize=(30, (len(portfolio_rets.columns) // 2)*7))
 	plt.close()
 	camera = Camera(fig)
-	gs = gridspec.GridSpec(len(portfolio_rets.columns) // 2, 3)
-
-	for i in range(0, portfolio_weights["EW_true"].shape[0]):
-		ax00 = plt.subplot(gs[0,0])
-		ax00.plot(portfolio_rets.index, cum_rets["EW_true"], label="True")
-		ax00.plot(portfolio_rets.index, cum_rets["EW_pred"], label="Pred")
-		ax00.xaxis.set_tick_params(rotation=45)
-		ax00.legend()
-		ax00.set_title("Equally-Weighted (EW) Portfolio Returns")
-		
-		ax01 = plt.subplot(gs[0,1:])
-		ax01.bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["EW_true"].iloc[i], width = 1.2, label = "True")
-		ax01.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["EW_pred"].iloc[i], width = 1.2, label = "Pred")
-		ax01.set_xticks([i for i in range(0,len(stocks)*4,4)])
-		ax01.set_xticklabels(stocks, rotation = 45)
-		ax01.set_title("Weighted Components of the EW Portfolio")
-		ax01.legend()
-		
-		ax10 = plt.subplot(gs[1,0])
-		ax10.plot(portfolio_rets.index, cum_rets["GMV_sample_true"], label="True")
-		ax10.plot(portfolio_rets.index, cum_rets["GMV_sample_pred"], label="Pred")
-		ax10.xaxis.set_tick_params(rotation=45)
-		ax10.legend()
-		ax10.set_title("Global Minimum Variance (GMV) Portfolio Returns with Sample Covariance Matrix")
-		
-		ax11 = plt.subplot(gs[1,1:])
-		ax11.bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_sample_true"].iloc[i], width = 1.2, label = "True")
-		ax11.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_sample_pred"].iloc[i], width = 1.2, label = "Pred")
-		ax11.set_xticks([i for i in range(0,len(stocks)*4,4)])
-		ax11.set_xticklabels(stocks, rotation = 45)
-		ax11.set_title("Weighted Components of the GMV Portfolio with Sample Correlation Matrix")
-		ax11.legend()
-		
-		ax20 = plt.subplot(gs[2,0])
-		ax20.plot(portfolio_rets.index, cum_rets["GMV_cc_true"], label="True")
-		ax20.plot(portfolio_rets.index, cum_rets["GMV_cc_pred"], label="Pred")
-		ax20.xaxis.set_tick_params(rotation=45)
-		ax20.legend()
-		ax20.set_title("Global Minimum Variance (GMV) Portfolio Returns with Constant Correlation Matrix")
-		
-		ax21 = plt.subplot(gs[2,1:])
-		ax21.bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_cc_true"].iloc[i], width = 1.2, label = "True")
-		ax21.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_cc_pred"].iloc[i], width = 1.2, label = "Pred")
-		ax21.set_xticks([i for i in range(0,len(stocks)*4,4)])
-		ax21.set_xticklabels(stocks, rotation = 45)
-		ax21.set_title("Weighted Components of the GMV Portfolio with Constant Correlation Matrix")
-		ax21.legend()
-		
-		ax30 = plt.subplot(gs[3,0])
-		ax30.plot(portfolio_rets.index, cum_rets["GMV_shrinkage_true"], label="True")
-		ax30.plot(portfolio_rets.index, cum_rets["GMV_shrinkage_pred"], label="Pred")
-		ax30.xaxis.set_tick_params(rotation=45)
-		ax30.legend()
-		ax30.set_title("Global Minimum Variance (GMV) Portfolio Returns with Shrinkage Covariance Matrix")
-		
-		ax31 = plt.subplot(gs[3,1:])
-		ax31.bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_shrinkage_true"].iloc[i], width = 1.2, label = "True")
-		ax31.bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_shrinkage_pred"].iloc[i], width = 1.2, label = "Pred")
-		ax31.set_xticks([i for i in range(0,len(stocks)*4,4)])
-		ax31.set_xticklabels(stocks, rotation = 45)
-		ax31.set_title("Weighted Components of the GMV Portfolio with Shrinkage Covariance Matrix")
-		ax31.legend()
+	#gs = gridspec.GridSpec(len(portfolio_rets.columns) // 2, 3)
 	
+	
+	for i in range(0, portfolio_weights["EW_true"].shape[0]):
+		#ax00, ax10, ax20, ax30 = plt.subplot(gs[0,0]), plt.subplot(gs[1,0]), plt.subplot(gs[2,0]), plt.subplot(gs[3,0])
+		#ax01, ax11, ax21, ax31 = plt.subplot(gs[0,1:]), plt.subplot(gs[1,1:]), plt.subplot(gs[2,1:]), plt.subplot(gs[3,1:])
+		
+		'''
+		EW
+		'''
+		#ax00.clear()
+		axs[0,0].plot(portfolio_rets.index, cum_rets["EW_true"], color='#F8766D')
+		axs[0,0].plot(portfolio_rets.index, cum_rets["EW_pred"], color='#619CFF')
+		axs[0,0].xaxis.set_tick_params(rotation=45)
+		axs[0,0].legend(handles=[mpatches.Patch(color='#F8766D', label='True'), mpatches.Patch(color='#619CFF', label='Pred')])
+		axs[0,0].set_title("Equally-Weighted (EW) Portfolio Returns")
+
+		#ax01.clear()
+		axs[0,1].bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["EW_true"].iloc[i], width = 1.2, color = '#F8766D')
+		axs[0,1].bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["EW_pred"].iloc[i], width = 1.2, color = '#619CFF')
+		axs[0,1].text(0.45, 0.85, '{}'.format(portfolio_weights["EW_true"].index[i].strftime("%Y/%m/%d")),
+			style='italic', transform=axs[0,1].transAxes, fontsize = 16, family='fantasy',
+			bbox={'facecolor':'tomato', 'alpha':0.8, 'pad':5})
+		axs[0,1].set_xticks([i for i in range(0,len(stocks)*4,4)])
+		axs[0,1].set_xticklabels(stocks, rotation = 45)
+		axs[0,1].set_title("Weighted Components of the EW Portfolio\n{}".format(portfolio_weights["EW_true"].index[i].strftime("%Y/%m/%d")))
+		#axs[0,1].legend(handles=[mpatches.Patch(color='#F8766D', label='True'), mpatches.Patch(color='#619CFF', label='Pred')])
+
+		'''
+		GMV Sample
+		'''
+		#ax10.clear()
+		axs[1,0].plot(portfolio_rets.index, cum_rets["GMV_sample_true"], color='#F8766D')
+		axs[1,0].plot(portfolio_rets.index, cum_rets["GMV_sample_pred"], color='#619CFF')
+		axs[1,0].xaxis.set_tick_params(rotation=45)
+		axs[1,0].legend(handles=[mpatches.Patch(color='#F8766D', label='True'), mpatches.Patch(color='#619CFF', label='Pred')])
+		axs[1,0].set_title("Global Minimum Variance (GMV) Portfolio Returns with Sample Covariance Matrix")
+		
+		#ax11.clear()
+		axs[1,1].bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_sample_true"].iloc[i], width = 1.2, color = '#F8766D')
+		axs[1,1].bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_sample_pred"].iloc[i], width = 1.2, color = '#619CFF')
+		axs[1,1].text(0.45, 0.85, '{}'.format(portfolio_weights["GMV_sample_true"].index[i].strftime("%Y/%m/%d")),
+			style='italic', transform=axs[1,1].transAxes, fontsize = 16, family='fantasy',
+			bbox={'facecolor':'tomato', 'alpha':0.8, 'pad':5})
+		axs[1,1].set_xticks([i for i in range(0,len(stocks)*4,4)])
+		axs[1,1].set_xticklabels(stocks, rotation = 45)
+		axs[1,1].set_title("Weighted Components of the GMV Portfolio with Sample Correlation Matrix\n{}".format(portfolio_weights["GMV_sample_true"].index[i].strftime("%Y/%m/%d")))
+		#axs[1,1].legend(handles=[mpatches.Patch(color='#F8766D', label='True'), mpatches.Patch(color='#619CFF', label='Pred')])
+		
+		'''
+		GMV Constant Correlation
+		'''
+		#ax10.clear()
+		axs[2,0].plot(portfolio_rets.index, cum_rets["GMV_cc_true"], color='#F8766D')
+		axs[2,0].plot(portfolio_rets.index, cum_rets["GMV_cc_pred"], color='#619CFF')
+		axs[2,0].xaxis.set_tick_params(rotation=45)
+		axs[2,0].legend(handles=[mpatches.Patch(color='#F8766D', label='True'), mpatches.Patch(color='#619CFF', label='Pred')])
+		axs[2,0].set_title("Global Minimum Variance (GMV) Portfolio Returns with Sample Covariance Matrix")
+		
+		#ax11.clear()
+		axs[2,1].bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_cc_true"].iloc[i], width = 1.2, color = '#F8766D')
+		axs[2,1].bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_cc_pred"].iloc[i], width = 1.2, color = '#619CFF')
+		axs[2,1].text(0.45, 0.85, '{}'.format(portfolio_weights["GMV_cc_true"].index[i].strftime("%Y/%m/%d")),
+			style='italic', transform=axs[2,1].transAxes, fontsize = 16, family='fantasy',
+			bbox={'facecolor':'tomato', 'alpha':0.8, 'pad':5})
+		axs[2,1].set_xticks([i for i in range(0,len(stocks)*4,4)])
+		axs[2,1].set_xticklabels(stocks, rotation = 45)
+		axs[2,1].set_title("Weighted Components of the GMV Portfolio with Constant Correlation Matrix\n{}".format(portfolio_weights["GMV_cc_true"].index[i].strftime("%Y/%m/%d")))
+		#axs[2,1].legend(handles=[mpatches.Patch(color='#F8766D', label='True'), mpatches.Patch(color='#619CFF', label='Pred')])
+
+		'''
+		GMV Shrinkage Correlation
+		'''
+		#ax10.clear()
+		axs[3,0].plot(portfolio_rets.index, cum_rets["GMV_shrinkage_true"], color='#F8766D')
+		axs[3,0].plot(portfolio_rets.index, cum_rets["GMV_shrinkage_pred"], color='#619CFF')
+		axs[3,0].xaxis.set_tick_params(rotation=45)
+		axs[3,0].legend(handles=[mpatches.Patch(color='#F8766D', label='True'), mpatches.Patch(color='#619CFF', label='Pred')])
+		axs[3,0].set_title("Global Minimum Variance (GMV) Portfolio Returns with Sample Covariance Matrix")
+		
+		#ax11.clear()
+		axs[3,1].bar([i-.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_shrinkage_true"].iloc[i], width = 1.2, color = '#F8766D')
+		axs[3,1].bar([i+.7 for i in range(0,len(stocks)*4,4)], portfolio_weights["GMV_shrinkage_pred"].iloc[i], width = 1.2, color = '#619CFF')
+		axs[3,1].text(0.45, 0.85, '{}'.format(portfolio_weights["GMV_shrinkage_true"].index[i].strftime("%Y/%m/%d")),
+			style='italic', transform=axs[3,1].transAxes, fontsize = 16, family='fantasy',
+			bbox={'facecolor':'tomato', 'alpha':0.8, 'pad':5})
+		axs[3,1].set_xticks([i for i in range(0,len(stocks)*4,4)])
+		axs[3,1].set_xticklabels(stocks, rotation = 45)
+		axs[3,1].set_title("Weighted Components of the GMV Portfolio with Shrinkage Correlation Matrix\n{}".format(portfolio_weights["GMV_shrinkage_true"].index[i].strftime("%Y/%m/%d")))
+		#axs[3,1].legend(handles=[mpatches.Patch(color='#F8766D', label='True'), mpatches.Patch(color='#619CFF', label='Pred')])
+		
+
 		fig.tight_layout()
 		camera.snap()
-
 	anim = camera.animate(blit = False, interval = 200)
 	if savefig:
 		anim.save("PortfolioEvolution.mp4")
-	
+
 	return anim
