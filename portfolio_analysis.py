@@ -7,6 +7,7 @@ from scipy.stats import norm
 import matplotlib.pyplot as plt
 import plotly.express as px
 import chart_studio.plotly as py
+from plotly.offline import iplot
 px.defaults.template = "ggplot2"
 
 def returns(df, **kwargs):
@@ -687,5 +688,5 @@ def plot_portfolio_weights(portfolio_weights):
 			}]
 	)
 
-	py.iplot(fig, filename="Portfolio_weights")
+	iplot(fig, filename="Portfolio_weights")
 		
