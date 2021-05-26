@@ -397,7 +397,7 @@ def plot_predictions(stocks, test_labels, preds, index_true, index_pred, show_da
 				label = stocks[i]+" true")
 		ax.set_xlabel('Date',fontsize=14)
 		ax.set_ylabel('Price',fontsize=14)
-		ax.legend(fontsize=16)
+		ax.legend(fontsize=14)
 		
 	if savefig:
 		plt.savefig("Stocks.png")
