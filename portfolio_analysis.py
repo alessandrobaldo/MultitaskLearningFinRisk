@@ -608,7 +608,6 @@ def plot_portfolio_weights(portfolio_weights):
 			curr_df = curr_df.groupby(curr_df.index.to_period('m')).head(1)
 			curr_df.columns = [sub+col for col in curr_df.columns]
 			curr_df['date'] = curr_df.apply(lambda x: x.name.strftime("%m/%Y"), axis=1)
-			curr_df = curr_df['']
 			dfs.append(
 				pd.wide_to_long(curr_df, stubnames = sub, i='date', j='stock', suffix=r'\w+')
 			)
