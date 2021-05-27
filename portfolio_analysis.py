@@ -687,8 +687,7 @@ def plot_portfolio_weights(portfolio_weights, savefig = False,**kwargs):
 			}]
 	)
 	if savefig:
-		fig.write_html(**kwargs["filename"])
-
+		fig.write_html(kwargs["filename"]+".html")
 	fig.show()
 
 
