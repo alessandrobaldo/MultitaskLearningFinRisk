@@ -596,7 +596,7 @@ def plot_portfolio_rets(portfolio_rets, savefig=False):
 	plt.show()
 
 
-def plot_portfolio_weights(portfolio_weights, savefig = False):
+def plot_portfolio_weights(portfolio_weights, savefig = False,**kwargs):
 
 	weights_df = None
 
@@ -687,9 +687,9 @@ def plot_portfolio_weights(portfolio_weights, savefig = False):
 			}]
 	)
 	if savefig:
-		iplot(fig, filename="Portfolio_weights.html")
-	else:
-		fig.show()
+		fig.write_html(**kwargs["filename"])
+
+	fig.show()
 
 
 
