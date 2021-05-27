@@ -596,7 +596,7 @@ def plot_portfolio_rets(portfolio_rets, savefig=False):
 	plt.show()
 
 
-def plot_portfolio_weights(portfolio_weights):
+def plot_portfolio_weights(portfolio_weights, savefig = False):
 
 	weights_df = None
 
@@ -621,7 +621,6 @@ def plot_portfolio_weights(portfolio_weights):
 			weights_df = pd.concat([weights_df, merged_df], ignore_index = True)
 		else:
 			weights_df = merged_df.copy()
-
 
 	fig = px.bar(weights_df, x='stock', y=['True', 'Pred'], color_discrete_map= {'True':'#F8766D','Pred':'#619CFF'},
 			animation_frame='date',range_y=[0,1], facet_row='scheme', barmode="group", height = 1000, width = 1500)
@@ -687,6 +686,12 @@ def plot_portfolio_weights(portfolio_weights):
 				"yanchor": "top"
 			}]
 	)
+	if savefig:
+		iplot(fig, filename="Portfolio_weights.html")
+	else:
+		fig.show()
 
-	iplot(fig, filename="Portfolio_weights")
-		
+
+
+
+
