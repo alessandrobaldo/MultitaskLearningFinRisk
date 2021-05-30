@@ -581,7 +581,7 @@ def PearsonCorr(true, target, reduction = True):
 	"""
 	v1 = true - true.mean(0)
 	v2 = target - target.mean(1).unsqueeze(1)
-	pearson_coeff = (v1*v2).sum(1) / (torch.sqrt((v1**2).sum(0)) * torch.sqrt(v2 ** 2).sum(1))
+	pearson_coeff = 1-(v1*v2).sum(1) / (torch.sqrt((v1**2).sum(0)) * torch.sqrt(v2 ** 2).sum(1))
 
 	if reduction:
 		return pearson_coeff.mean(0), pearson_coeff.std(0)
@@ -608,7 +608,7 @@ def MSE(true, target, reduction = True):
 		return mse
 
 @args_as_tensors(0, 1)
-def RMSE(true, target):
+def RMSE(true, target, reduction = True):
 	"""
 	Method to compute the Root Mean Squared Error between two sequences
 	Args:
@@ -620,7 +620,11 @@ def RMSE(true, target):
 	- the Root Mean Squared Error
 	"""
 	rmse = torch.sqrt(((true - target)**2).mean(1))
-	return rmse.mean(0), rmse.std(0)
+
+	if reduction:
+		return rmse.mean(0), rmse.std(0)
+	else:
+		return rmse
 
 @args_as_tensors(0, 1)
 def MAE(true, target, reduction = True):
@@ -673,15 +677,16 @@ def aggregate_statistics(preds, test_labels, stocks):
 	
 	return pd.DataFrame(
 		{
-			("MSE","mean") : MSE(test_labels, preds)[0], ("MSE", "std"): MSE(test_labels, preds)[1],
-			("MAE","mean") : MAE(test_labels, preds)[0], ("MAE", "std"): MAE(test_labels, preds)[1],
-			("MAPE","mean") : MAPE(test_labels, preds)[0], ("MAPE", "std"): MAPE(test_labels, preds)[1],
-			("RMSE","mean") : RMSE(test_labels, preds)[0], ("RMSE", "std"): RMSE(test_labels, preds)[1],
-			("PearsonCorr","mean") : PearsonCorr(test_labels, preds)[0], ("PearsonCorr", "std"): PearsonCorr(test_labels, preds)[1]
+			("MSE","mean") : MSE(test_labels, preds)[0].cpu().numpy(), ("MSE", "std"): MSE(test_labels, preds)[1].cpu().numpy(),
+			("MAE","mean") : MAE(test_labels, preds)[0].cpu().numpy(), ("MAE", "std"): MAE(test_labels, preds)[1].cpu().numpy(),
+			("MAPE","mean") : MAPE(test_labels, preds)[0].cpu().numpy(), ("MAPE", "std"): MAPE(test_labels, preds)[1].cpu().numpy(),
+			("RMSE","mean") : RMSE(test_labels, preds)[0].cpu().numpy(), ("RMSE", "std"): RMSE(test_labels, preds)[1].cpu().numpy(),
+			("PearsonCorr","mean") : PearsonCorr(test_labels, preds)[0].cpu().numpy(), ("PearsonCorr", "std"): PearsonCorr(test_labels, preds)[1].cpu().numpy()
 			
 		}, index = stocks
 	)
 
+@args_as_tensors(0, 1)
 def plot_hist_errors(preds, test_labels, stocks, savefig = False):
 	"""
 	Method to plot the aggregated statistics between a set of predictions and the groud truth
@@ -691,23 +696,26 @@ def plot_hist_errors(preds, test_labels, stocks, savefig = False):
 	- stocks: the names of the components
 	- savefig (optional): whether to save or not the plot
 	"""
+	preds, test_labels = preds.to(device), test_labels.to(device)
 
-	fig, axs = plt.subplots(len(stocks), 5, figsize=(30, len(stocks)*15))
+	fig, axs = plt.subplots(len(stocks), 5, figsize=(30, len(stocks)*5))
 
-	aggregate_fns = [MSE, MAE, MAPE, RMSE, PearsonCorr]
+	aggregate_fns = [("MSE",ut.MSE), ("MAE",ut.MAE), ("MAPE",ut.MAPE), ("RMSE",RMSE), ("PearsonCorr",ut.PearsonCorr)]
 
-	stats = OrderedDict({fn.__name__ : fn(test_labels, preds, reduction = False) for fn in aggregate_fns})
+	stats = OrderedDict({fn[0] : fn[1](test_labels, preds, reduction = False) for fn in aggregate_fns})
 
 	for j,stat in enumerate(stats.keys()):
 		for i, stock in enumerate(stocks):
-			metric = pd.Series(stats[stat][:, i])
+			metric = pd.Series(stats[stat][:, i].cpu().numpy())
 			axs[i,j].grid()
 			metric.plot.kde(bw_method = 0.3, ax = axs[i,j])
+			plt.setp(axs[i,j].get_xticklabels(), rotation=45)
 			axs[i,j].set_title("{}-{}".format(stock, stat))
+			
 
 	if savefig:
 		plt.savefig("Errors.png")
-
+	fig.tight_layout()
 	plt.show()
 	
 

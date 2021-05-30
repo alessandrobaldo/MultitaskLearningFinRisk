@@ -6,7 +6,6 @@ import scipy.stats
 from scipy.stats import norm
 import matplotlib.pyplot as plt
 import plotly.express as px
-import chart_studio.plotly as py
 from plotly.offline import iplot
 px.defaults.template = "ggplot2"
 
@@ -687,7 +686,8 @@ def plot_portfolio_weights(portfolio_weights, savefig = False,**kwargs):
 			}]
 	)
 	if savefig:
-		fig.write_html(kwargs["filename"]+".html")
+		fig.write_html(kwargs["filename"])
+
 	fig.show()
 
 
