@@ -557,43 +557,73 @@ def get_predictions_from_files(model_folder, model, stocks, test_loader):
 """
 Performance Assessment
 """
+def args_as_tensors(*index):
+	"""A simple decorator to convert numpy arrays to torch tensors"""
+	def decorator(method):
+		def wrapper(*args, **kwargs):
+			converted_args = [torch.tensor(a).float() 
+							  if i in index and type(a) is np.ndarray else a 
+							  for i, a in enumerate(args)]
+			return method(*converted_args, **kwargs)
+		return wrapper  
+	return decorator
 
-def PearsonCorr(y1, y2):
+@args_as_tensors(0, 1)
+def PearsonCorr(true, target, reduction = True):
 	"""
 	Method to compute the Pearson Correlation coefficient between two sequences
 	Args:
-	- y1, y2: the two sequences for whcih we want to compute the Pearson Correlation coefficient
+	- true: a tensor num_prices x num_stocks
+	- target: a tensor batch x num_prices x num_stocks
 	
 	Returns:
 	- the Pearson Correlation coefficient
 	"""
-	v1 = y1 - torch.mean(y1, axis = 0)
-	v2 = y2 - torch.mean(y2, axis = 0)
-	return torch.sum(v1 * v2, axis = 0) / (torch.sqrt(torch.sum(v1 ** 2, axis = 0)) * torch.sqrt(torch.sum(v2 ** 2, axis= 0)))
+	v1 = true - true.mean(0)
+	v2 = target - target.mean(1).unsqueeze(1)
+	pearson_coeff = (v1*v2).sum(1) / (torch.sqrt((v1**2).sum(0)) * torch.sqrt(v2 ** 2).sum(1))
 
-def MSE(y1, y2):
+	if reduction:
+		return pearson_coeff.mean(0), pearson_coeff.std(0)
+	else:
+		return pearson_coeff
+
+@args_as_tensors(0, 1)
+def MSE(true, target, reduction = True):
 	"""
 	Method to compute the Mean Squared Error between two sequences
 	Args:
-	- y1, y2: the two sequences for whcih we want to compute the Mean Squared Error
+	- true: a tensor num_prices x num_stocks
+	- target: a tensor batch x num_prices x num_stocks
+	
 	
 	Returns:
 	- the Mean Squared Error
 	"""
-	return torch.mean((y1 - y2)**2, axis=0)
+	mse = ((true - target)**2).mean(1)
 
-def RMSE(y1,y2):
+	if reduction:
+		return mse.mean(0), mse.std(0)
+	else:
+		return mse
+
+@args_as_tensors(0, 1)
+def RMSE(true, target):
 	"""
 	Method to compute the Root Mean Squared Error between two sequences
 	Args:
-	- y1, y2: the two sequences for whcih we want to compute the Root Mean Squared Error
+	- true: a tensor num_prices x num_stocks
+	- target: a tensor batch x num_prices x num_stocks
+	
 	
 	Returns:
 	- the Root Mean Squared Error
 	"""
-	return torch.sqrt(MSE(y1,y2))
+	rmse = torch.sqrt(((true - target)**2).mean(1))
+	return rmse.mean(0), rmse.std(0)
 
-def MAE(y1, y2):
+@args_as_tensors(0, 1)
+def MAE(true, target, reduction = True):
 	"""
 	Method to compute the Mean Absolute Error between two sequences
 	Args:
@@ -602,72 +632,86 @@ def MAE(y1, y2):
 	Returns:
 	- the Mean Absolute Error
 	"""
-	return torch.mean(torch.abs(y1-y2), axis = 0)
+	mae = torch.abs(true - target).mean(1)
 
-def MAPE(y1, y2):
+	if reduction:
+		return mae.mean(0), mae.std(0)
+	else:
+		return mae
+
+@args_as_tensors(0, 1)
+def MAPE(true, target, reduction = True):
 	"""
 	Method to compute the Mean Absolute Percentage Error between two sequences
 	Args:
-	- y1, y2: the two sequences for whcih we want to compute the Mean Absolute Percentage Error
+	- true: a tensor num_prices x num_stocks
+	- target: a tensor batch x num_prices x num_stocks
 	
 	Returns:
 	- the Mean Absolute Percentage Error
 	"""
-	return torch.mean(torch.abs(y1-y2) / y1, axis=0)
+	mape = (torch.abs(true-target) / true).mean(1)
 
-def compute_statistics(stocks, model, path, test_loader, verbose = True):
+	if reduction:
+		return mape.mean(0), mape.std(0)
+	else:
+		return mape
+
+@args_as_tensors(0, 1)
+def aggregate_statistics(preds, test_labels, stocks):
 	"""
-	Method to collect the overall performance statistics for a particular model
+	Method to compute the aggregated statistics between a set of predictions and the groud truth
 	Args:
-	- stocks: stocks to be displayed
-	- model: the model to assess the performances
-	- path: the folder path to the models to be loaded
-	- test_loader: the DataLoader over which assessing the performances
-	- verbose: whether or not to print the metrics
+	- test_labels: a tensor num_prices x num_stocks
+	- preds: a tensor batch x num_prices x num_stocks
+	- stocks: the names of the components
 	
 	Returns:
-	void if verbose, otherwise it returns the performance metrics
+	- a pandas DataFrame with the aggregated statistics
 	"""
-	mse, rmse, mae, mape, corr  = [],[],[],[],[]
-	for model_path in os.listdir(path):
-		model.load_state_dict(torch.load(path+"/"+model_path,map_location = torch.device(device)))
-		model = model.to(device)
-		test_data, test_labels, _ = next(iter(test_loader))
-		test_data = test_data.to(device)
-		test_labels = test_labels.to(device)
+	preds, test_labels = preds.to(device), test_labels.to(device)
 	
-		with torch.no_grad():
-			predicted_labels = model(test_data)
-		mse.append(MSE(test_labels, predicted_labels))
-		rmse.append(RMSE(test_labels, predicted_labels))
-		mae.append(MAE(test_labels, predicted_labels))
-		mape.append(MAPE(test_labels, predicted_labels))
-		corr.append(PearsonCorr(test_labels, predicted_labels))
-	
-	mse = torch.mean(torch.stack(mse, dim = 0), dim = 0)
-	rmse = torch.mean(torch.stack(rmse, dim = 0), dim = 0)
-	mae = torch.mean(torch.stack(mae, dim = 0), dim = 0)
-	mape = torch.mean(torch.stack(mape, dim = 0), dim = 0)
-	corr = torch.mean(torch.stack(corr, dim = 0), dim = 0)
-	
-	if verbose:
-		for i in range(0, len(stocks),11):
-			print("{0:>9}".format("Stocks")+" | ".join(["{0:>9}".format(s) for s in stocks[i:i+11]]))
-			print("-"*len(stocks[i:i+11])*13)
-			print("{0:>9}".format("MSE")+" | ".join(["{0:>9}".format(round(el,2)) for el in mse.tolist()[i:i+11]]))
-			print("-"*len(stocks[i:i+11])*13)
-			print("{0:>9}".format("RMSE")+" | ".join(["{0:>9}".format(round(el,2)) for el in rmse.tolist()[i:i+11]]))
-			print("-"*len(stocks[i:i+11])*13)
-			print("{0:>9}".format("MAE")+" | ".join(["{0:>9}".format(round(el,3)) for el in mae.tolist()[i:i+11]]))
-			print("-"*len(stocks[i:i+11])*13)
-			print("{0:>9}".format("MAPE")+"% | ".join(["{0:>8}".format(round(el*100,2)) for el in mape.tolist()[i:i+11]])+"%")
-			print("-"*len(stocks[i:i+11])*13)
-			print("{0:>9}".format("Corr")+" | ".join(["{0:>9}".format(round(el,3)) for el in corr.tolist()[i:i+11]]))
-			print("\n\n")
+	return pd.DataFrame(
+		{
+			("MSE","mean") : MSE(test_labels, preds)[0], ("MSE", "std"): MSE(test_labels, preds)[1],
+			("MAE","mean") : MAE(test_labels, preds)[0], ("MAE", "std"): MAE(test_labels, preds)[1],
+			("MAPE","mean") : MAPE(test_labels, preds)[0], ("MAPE", "std"): MAPE(test_labels, preds)[1],
+			("RMSE","mean") : RMSE(test_labels, preds)[0], ("RMSE", "std"): RMSE(test_labels, preds)[1],
+			("PearsonCorr","mean") : PearsonCorr(test_labels, preds)[0], ("PearsonCorr", "std"): PearsonCorr(test_labels, preds)[1]
 			
-	else: return mse, rmse, mae, mape, corr
+		}, index = stocks
+	)
 
+def plot_hist_errors(preds, test_labels, stocks, savefig = False):
+	"""
+	Method to plot the aggregated statistics between a set of predictions and the groud truth
+	Args:
+	- test_labels: a tensor num_prices x num_stocks
+	- preds: a tensor batch x num_prices x num_stocks
+	- stocks: the names of the components
+	- savefig (optional): whether to save or not the plot
+	"""
 
+	fig, axs = plt.subplots(len(stocks), 5, figsize=(30, len(stocks)*15))
+
+	aggregate_fns = [MSE, MAE, MAPE, RMSE, PearsonCorr]
+
+	stats = OrderedDict({fn.__name__ : fn(test_labels, preds, reduction = False) for fn in aggregate_fns})
+
+	for j,stat in enumerate(stats.keys()):
+		for i, stock in enumerate(stocks):
+			metric = pd.Series(stats[stat][:, i])
+			axs[i,j].grid()
+			metric.plot.kde(bw_method = 0.3, ax = axs[i,j])
+			axs[i,j].set_title("{}-{}".format(stock, stat))
+
+	if savefig:
+		plt.savefig("Errors.png")
+
+	plt.show()
+	
+
+'''
 def plot_hist_errors(stocks, model_dict, window = 30, pred_window = 30, **kwargs):
 	"""
 	Method to plot distributions of the errors for a model
@@ -766,113 +810,4 @@ def plot_hist_errors(stocks, model_dict, window = 30, pred_window = 30, **kwargs
 		plt.savefig("Errors.png")
 
 	plt.show()
-
-"""
-Backtesting Strategies
-"""
-
-class Trader(threading.Thread):
-	def __init__(self, name, trading_fn,*args):
-		threading.Thread.__init__(self)
-		self.name = name
-		self.trading_fn = trading_fn
-		self.args = args
-
-	def run(self):
-		print("Running trading strategy: %s" %self.name)
-		self.trading_fn(self.args)
-
-
-def ew_portfolio(predictions, true_prices, time_index, stocks, pred_window = 30, budget = 1e5):
-
-	portfolio_history = {}
-	current_portfolio = OrderedDict({s: 0 for s in stocks})
-	entry_points = []
-
-	avg = np.mean(axis = 0)
-	min_p = np.min(preds.cpu().numpy(), axis = 0)
-	max_p = np.max(preds.cpu().numpy(), axis = 0)
-
-	for j, stock in enumerate(stocks):
-		for i in range(len(predictions)):
-			minimum_price = min_p[i: i+pred_window,j]
-			maximum_price = max_p[i: i+pred_window,j]
-			avg_price = avg[i: i+pred_window,j]
-			
-			confidence_score = 1 - (maximum_price - minimum_price)/avg_price
-
-			local_minima = argrelextrema(avg_price, np.less)[0]
-			local_maxima = argrelextrema(avg_price, np.greater)[0]
-
-			for pos in local_minima:
-				if random.uniform(0,1) <= confidence_score[pos]:
-					entry_points.append(
-						(i+pos, "BUY",j)
-					)
-
-			for pos in local_maxima:
-				if random.uniform(0,1) <= confidence_score[pos]:
-					entry_points.append(
-						(i+pos, "SELL", j)
-					)
-
-
-	entry_points.sort(key = lambda x: x["time"][1])
-	events = PriorityQueue()
-
-	for event in entry_points:
-		events.put(event)
-
-	"""
-	Simulation begins
-	"""
-	while budget > 0 and events.qsize()>0:
-
-		event = events.get()
-
-		index_time = event[0]
-		date = time_index[index_time]
-		
-		index_stock = event[2]
-		stock = stocks[index_stock]
-
-		if event[1] == 'BUY':
-			i = stocks.index(stock)
-			ew_value = min(
-			(np.dot(current_portfolio.values, true_prices[index_time,:]) + budget)/len(stocks) - current_portfolio[stock]*true_prices[index_time,index_stock], 0
-			)
-			num_stocks = min(0, ew_value // true_prices[index_time, index_stock])
-			budget -= num_stocks * true_prices[index_time, index_stock]
-			current_portfolio[stock] += num_stocks
-			portfolio_history[date] = current_portfolio
-
-			#Place either HOLD or CloseBuy
-
-
-		else:
-			i = stocks.index(stock)
-			budget += current_portfolio[stock] * true_prices[event[2], i]
-			current_portfolio[stock] = 0
-			portfolio_history[date] = current_portfolio
-
-			#Place either HOLD or CloseSell 
-
-
-"""
-Animated Pie Chart
-
-import numpy as np
-import matplotlib.pyplot as plt
-fig,ax = plt.subplots()
-explode=[0.01,0.01,0.01,0.01] #pop out each slice from the pie
-def getmepie(i):
-    def absolute_value(val): #turn % back to a number
-        a  = np.round(val/100.*df1.head(i).max().sum(), 0)
-        return int(a)
-    ax.clear()
-    plot = df1.head(i).max().plot.pie(y=df1.columns,autopct=absolute_value, label='',explode = explode, shadow = True)
-    plot.set_title('Total Number of Deaths\n' + str(df1.index[min( i, len(df1.index)-1 )].strftime('%y-%m-%d')), fontsize=12)
-import matplotlib.animation as ani
-animator = ani.FuncAnimation(fig, getmepie, interval = 200)
-plt.show()
-"""
+'''
