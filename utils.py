@@ -700,7 +700,7 @@ def plot_hist_errors(preds, test_labels, stocks, savefig = False):
 
 	fig, axs = plt.subplots(len(stocks), 5, figsize=(30, len(stocks)*5))
 
-	aggregate_fns = [("MSE",ut.MSE), ("MAE",ut.MAE), ("MAPE",ut.MAPE), ("RMSE",RMSE), ("PearsonCorr",ut.PearsonCorr)]
+	aggregate_fns = [("MSE",MSE), ("MAE",MAE), ("MAPE",MAPE), ("RMSE",RMSE), ("PearsonCorr",PearsonCorr)]
 
 	stats = OrderedDict({fn[0] : fn[1](test_labels, preds, reduction = False) for fn in aggregate_fns})
 
