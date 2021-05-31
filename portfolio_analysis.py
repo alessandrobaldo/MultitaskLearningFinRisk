@@ -595,7 +595,7 @@ def plot_portfolio_rets(portfolio_rets, savefig=False):
 	plt.show()
 
 
-def plot_portfolio_weights(portfolio_weights, savefig = False,**kwargs):
+def plot_portfolio_weights(portfolio_weights, filename):
 
 	weights_df = None
 
@@ -685,10 +685,7 @@ def plot_portfolio_weights(portfolio_weights, savefig = False,**kwargs):
 				"yanchor": "top"
 			}]
 	)
-	if savefig:
-		fig.write_html(kwargs["filename"])
-
-	fig.show()
+	fig.write_html(filename+".html")
 
 
 
