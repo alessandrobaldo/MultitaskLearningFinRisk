@@ -497,8 +497,18 @@ def w_msr(sigma, mu, scale=True):
 	w = inverse(sigma).dot(mu)
 	if scale:
 		w = w/sum(w) # fix: this assumes all w is +ve
-	return w
+	return w		
 
+def weight_look_ahead(r, window = 30, look_ahead = True):
+	cum_pred = (1+pred_returns).rolling(window=30).apply(np.prod, raw=True) - 1
+	def eval_weights(compounded_r):
+		compounded_r[compounded_r<0] = 0
+		return compounded_r/ compounded_r.sum()
+	
+	weights = cum_pred.dropna().apply(eval_weights, axis=1)
+	if look_ahead:
+		weights.index = r.index[:-window]
+	return weights
 
 def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbose=False, **kwargs):
 	"""
@@ -510,15 +520,20 @@ def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbo
 	print("\r", end="")
 	print("Starting backtesting on {} {}".\
 		format(weighting.__name__, kwargs["cov_estimator"].__name__ if "cov_estimator" in kwargs else ""), end="")
-	n_periods = r_true.shape[0]
-	# return windows
-	windows = [(start-30, start, start + estimation_window) for start in range(30, n_periods-estimation_window)]
+	
+	if weighting.__name__ != "weight_look_ahead":
+		n_periods = r_true.shape[0]
+		# return windows
+		windows = [(start-30, start, start + estimation_window) for start in range(30, n_periods-estimation_window)]
+		weights_true = [weighting(r_true.iloc[win[0]:win[1]], **kwargs) for win in windows]
+		weights_pred = [weighting(pd.concat([r_true.iloc[win[0]:win[1]], r_pred.iloc[win[1]:win[2]]]), **kwargs) for win in windows]
+		# convert List of weights to DataFrame
+		weights_true = pd.DataFrame(weights_true, index=r_true.iloc[30:n_periods-estimation_window].index, columns=r_true.columns)
+		weights_pred = pd.DataFrame(weights_pred, index=r_pred.iloc[30:n_periods-estimation_window].index, columns=r_pred.columns)
+	else:
+		weights_true = weight_look_ahead(r_true, window = estimation_window, look_ahead = False)
+		weights_pred = weight_look_ahead(r_pred, window = estimation_window, look_ahead = True).iloc[30:]
 
-	weights_true = [weighting(r_true.iloc[win[0]:win[1]], **kwargs) for win in windows]
-	weights_pred = [weighting(pd.concat([r_true.iloc[win[0]:win[1]], r_pred.iloc[win[1]:win[2]]]), **kwargs) for win in windows]
-	# convert List of weights to DataFrame
-	weights_true = pd.DataFrame(weights_true, index=r_true.iloc[30:n_periods-estimation_window].index, columns=r_true.columns)
-	weights_pred = pd.DataFrame(weights_pred, index=r_pred.iloc[30:n_periods-estimation_window].index, columns=r_pred.columns)
 	returns_true = (weights_true * r_true).sum(axis="columns",  min_count=1) #mincount is to generate NAs if all inputs are NAs
 	returns_pred = (weights_pred * r_true).sum(axis="columns",  min_count=1)
 	return returns_true, returns_pred, weights_true, weights_pred
@@ -542,18 +557,25 @@ def get_portfolio(true_returns, pred_returns, pred_window = 30):
 	gmv_shrink_true, gmv_shrink_pred, gmv_shrink_w_true, gmv_shrink_w_pred = backtest_ws(
 		true_returns, pred_returns, estimation_window = pred_window, weighting=weight_gmv, cov_estimator = shrinkage_cov)
 
+	#Look ahead portfolio
+	look_ahead_true, look_ahead_pred, look_ahead_w_true, look_ahead_w_pred = backtest_ws(
+		true_returns, pred_returns, estimation_window = pred_window, weighting=weight_look_ahead)
+
+
 	return pd.DataFrame(
 		{
 		"EW_true": ew_true, "EW_pred": ew_pred,
 		"GMV_sample_true": gmv_sample_true, "GMV_sample_pred": gmv_sample_pred,
 		"GMV_cc_true": gmv_cc_true, "GMV_cc_pred": gmv_cc_pred,
-		"GMV_shrinkage_true": gmv_shrink_true, "GMV_shrinkage_pred": gmv_shrink_pred
+		"GMV_shrinkage_true": gmv_shrink_true, "GMV_shrinkage_pred": gmv_shrink_pred,
+		"Look_ahead_true": look_ahead_true, "Look_ahead_pred": look_ahead_pred
 		}
 		),{
 		"EW": {"True": ew_w_true, "Pred": ew_w_pred},
 		"GMV_sample": {"True": gmv_sample_w_true, "Pred": gmv_sample_w_pred},
 		"GMV_cc": {"True": gmv_cc_w_true, "Pred": gmv_cc_w_pred},
-		"GMV_shrinkage": {"True": gmv_shrink_w_true, "Pred": gmv_shrink_w_pred}
+		"GMV_shrinkage": {"True": gmv_shrink_w_true, "Pred": gmv_shrink_w_pred},
+		"Look_ahead": {"True": look_ahead_w_true, "Pred": look_ahead_w_pred}
 		}
 		
 
@@ -562,36 +584,50 @@ def get_summary_stats(portfolio_rets):
 
 def plot_portfolio_rets(portfolio_rets, savefig=False):
 	cum_rets = (1+portfolio_rets).cumprod()
-	fig, axs = plt.subplots(2,2,figsize=(25, 25))
+	#fig, axs = plt.subplots(2,2,figsize=(25, 25))
+	fig = plt.figure()
+	gs = fig.add_gridspec(3,2)
 
-	axs[0,0].plot(portfolio_rets.index, cum_rets["EW_true"], color='#F8766D', label = "True")
-	axs[0,0].plot(portfolio_rets.index, cum_rets["EW_pred"], color='#619CFF', label="Pred")
-	axs[0,0].xaxis.set_tick_params(rotation=45)
-	axs[0,0].legend()
-	axs[0,0].set_title("Equally-Weighted (EW) Portfolio Returns")
+	ax00 = fig.add_subplot(gs[0,0])
+	ax00.plot(portfolio_rets.index, cum_rets["EW_true"], color='#F8766D', label = "True")
+	ax00.plot(portfolio_rets.index, cum_rets["EW_pred"], color='#619CFF', label="Pred")
+	ax00.xaxis.set_tick_params(rotation=45)
+	ax00.legend()
+	ax00.set_title("Equally-Weighted (EW) Portfolio Returns")
 
 
-	axs[0,1].plot(portfolio_rets.index, cum_rets["GMV_sample_true"], color='#F8766D', label = "True")
-	axs[0,1].plot(portfolio_rets.index, cum_rets["GMV_sample_pred"], color='#619CFF', label = "Pred")
-	axs[0,1].xaxis.set_tick_params(rotation=45)
-	axs[0,1].legend()
-	axs[0,1].set_title("Global Minimum Variance (GMV) Portfolio Returns with Sample Covariance Matrix")
+	ax01 = fig.add_subplot(gs[0,1])
+	ax01.plot(portfolio_rets.index, cum_rets["GMV_sample_true"], color='#F8766D', label = "True")
+	ax01.plot(portfolio_rets.index, cum_rets["GMV_sample_pred"], color='#619CFF', label = "Pred")
+	ax01.xaxis.set_tick_params(rotation=45)
+	ax01.legend()
+	ax01.set_title("Global Minimum Variance (GMV) Portfolio Returns with Sample Covariance Matrix")
 
-	axs[1,0].plot(portfolio_rets.index, cum_rets["GMV_cc_true"], color='#F8766D', label = "True")
-	axs[1,0].plot(portfolio_rets.index, cum_rets["GMV_cc_pred"], color='#619CFF', label = "Pred")
-	axs[1,0].xaxis.set_tick_params(rotation=45)
-	axs[1,0].legend()
-	axs[1,0].set_title("Global Minimum Variance (GMV) Portfolio Returns with Constant Covariance Matrix")
+	ax10 = fig.add_subplot(gs[1,0])
+	ax10.plot(portfolio_rets.index, cum_rets["GMV_cc_true"], color='#F8766D', label = "True")
+	ax10.plot(portfolio_rets.index, cum_rets["GMV_cc_pred"], color='#619CFF', label = "Pred")
+	ax10.xaxis.set_tick_params(rotation=45)
+	ax10.legend()
+	ax10.set_title("Global Minimum Variance (GMV) Portfolio Returns with Constant Covariance Matrix")
 
-	axs[1,1].plot(portfolio_rets.index, cum_rets["GMV_shrinkage_true"], color='#F8766D', label = "True")
-	axs[1,1].plot(portfolio_rets.index, cum_rets["GMV_shrinkage_pred"], color='#619CFF', label = "Pred")
-	axs[1,1].xaxis.set_tick_params(rotation=45)
-	axs[1,1].legend()
-	axs[1,1].set_title("Global Minimum Variance (GMV) Portfolio Returns with Shrinkage Covariance Matrix")
+	ax11 = fig.add_subplot(gs[1,1])
+	ax11.plot(portfolio_rets.index, cum_rets["GMV_shrinkage_true"], color='#F8766D', label = "True")
+	ax11.plot(portfolio_rets.index, cum_rets["GMV_shrinkage_pred"], color='#619CFF', label = "Pred")
+	ax11.xaxis.set_tick_params(rotation=45)
+	ax11.legend()
+	ax11.set_title("Global Minimum Variance (GMV) Portfolio Returns with Shrinkage Covariance Matrix")
+
+	ax2 = fig.add_subplot(gs[2,:])
+	ax2.plot(portfolio_rets.index, cum_rets["Look_ahead_true"], color='#F8766D', label = "True")
+	ax2.plot(portfolio_rets.index, cum_rets["Look_ahead_pred"], color='#619CFF', label = "Pred")
+	ax2.xaxis.set_tick_params(rotation=45)
+	ax2.legend()
+	ax2.set_title("Look Ahead Portfolio")
 
 	if savefig:
 		plt.savefig("Portfolio_returns.png")
 
+	fig.tight_layout()
 	plt.show()
 
 
