@@ -499,15 +499,15 @@ def w_msr(sigma, mu, scale=True):
 		w = w/sum(w) # fix: this assumes all w is +ve
 	return w		
 
-def weight_look_ahead(r, window = 30, look_ahead = True):
-	cum_pred = (1+pred_returns).rolling(window=30).apply(np.prod, raw=True) - 1
+def weight_look_ahead(r, window, look_ahead = True):
+	cum_ret = (1+r).rolling(window=window).apply(np.prod, raw=True) - 1
 	def eval_weights(compounded_r):
 		compounded_r[compounded_r<0] = 0
 		return compounded_r/ compounded_r.sum()
 	
-	weights = cum_pred.dropna().apply(eval_weights, axis=1)
+	weights = cum_ret.dropna().apply(eval_weights, axis=1)
 	if look_ahead:
-		weights.index = r.index[:-window]
+		weights.index = r.index[:-window+1]
 	return weights
 
 def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbose=False, **kwargs):
@@ -532,7 +532,7 @@ def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbo
 		weights_pred = pd.DataFrame(weights_pred, index=r_pred.iloc[30:n_periods-estimation_window].index, columns=r_pred.columns)
 	else:
 		weights_true = weight_look_ahead(r_true, window = estimation_window, look_ahead = False)
-		weights_pred = weight_look_ahead(r_pred, window = estimation_window, look_ahead = True).iloc[30:]
+		weights_pred = weight_look_ahead(r_pred, window = estimation_window, look_ahead = True).iloc[estimation_window:]
 
 	returns_true = (weights_true * r_true).sum(axis="columns",  min_count=1) #mincount is to generate NAs if all inputs are NAs
 	returns_pred = (weights_pred * r_true).sum(axis="columns",  min_count=1)
