@@ -502,13 +502,18 @@ def w_msr(sigma, mu, scale=True):
 def weight_look_ahead(r, window, look_ahead = True):
 	cum_ret = (1+r).rolling(window=window).apply(np.prod, raw=True) - 1
 	def eval_weights(compounded_r):
-		compounded_r[compounded_r<0] = 0
+		if (compounded_r>0).any():
+			compounded_r[compounded_r<0] = 0
 		return compounded_r/ compounded_r.sum()
-	
+
 	weights = cum_ret.dropna().apply(eval_weights, axis=1)
 	if look_ahead:
-		weights.index = r.index[:-window+1]
-	return weights
+		#weights.index = r.index[:len(weights.index)]
+		weights = weights.shift(-window)
+	else:
+		#weights.index = r.index[window+1:len(weights.index)+window+1]
+		weights = weights.shift(1)
+	return weights.dropna()
 
 def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbose=False, **kwargs):
 	"""
@@ -585,7 +590,7 @@ def get_summary_stats(portfolio_rets):
 def plot_portfolio_rets(portfolio_rets, savefig=False):
 	cum_rets = (1+portfolio_rets).cumprod()
 	#fig, axs = plt.subplots(2,2,figsize=(25, 25))
-	fig = plt.figure()
+	fig = plt.figure(figsize=(25,25))
 	gs = fig.add_gridspec(3,2)
 
 	ax00 = fig.add_subplot(gs[0,0])
@@ -656,7 +661,11 @@ def plot_portfolio_weights(portfolio_weights, filename):
 			weights_df = pd.concat([weights_df, merged_df], ignore_index = True)
 		else:
 			weights_df = merged_df.copy()
-
+			
+	weights_df = weights_df.dropna()
+	common_dates = weights_df.groupby('date')['scheme'].nunique().loc[lambda x: x==len(portfolio_weights.keys())].keys().values
+	weights_df = weights_df[weights_df['date'].isin(common_dates)]
+	
 	fig = px.bar(weights_df, x='stock', y=['True', 'Pred'], color_discrete_map= {'True':'#F8766D','Pred':'#619CFF'},
 			animation_frame='date',range_y=[0,1], facet_row='scheme', barmode="group", height = 1000, width = 1500)
 	fig.update_xaxes(type='category')
@@ -722,8 +731,3 @@ def plot_portfolio_weights(portfolio_weights, filename):
 			}]
 	)
 	fig.write_html(filename+".html")
-
-
-
-
-

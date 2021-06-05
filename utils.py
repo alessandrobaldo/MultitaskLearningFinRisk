@@ -687,7 +687,7 @@ def aggregate_statistics(preds, test_labels, stocks):
 	)
 
 @args_as_tensors(0, 1)
-def plot_hist_errors(preds, test_labels, stocks, savefig = False):
+def plot_hist_errors(preds, test_labels, stocks, axs, label):
 	"""
 	Method to plot the aggregated statistics between a set of predictions and the groud truth
 	Args:
@@ -698,8 +698,6 @@ def plot_hist_errors(preds, test_labels, stocks, savefig = False):
 	"""
 	preds, test_labels = preds.to(device), test_labels.to(device)
 
-	fig, axs = plt.subplots(len(stocks), 5, figsize=(30, len(stocks)*5))
-
 	aggregate_fns = [("MSE",MSE), ("MAE",MAE), ("MAPE",MAPE), ("RMSE",RMSE), ("PearsonCorr",PearsonCorr)]
 
 	stats = OrderedDict({fn[0] : fn[1](test_labels, preds, reduction = False) for fn in aggregate_fns})
@@ -708,15 +706,9 @@ def plot_hist_errors(preds, test_labels, stocks, savefig = False):
 		for i, stock in enumerate(stocks):
 			metric = pd.Series(stats[stat][:, i].cpu().numpy())
 			axs[i,j].grid()
-			metric.plot.kde(bw_method = 0.3, ax = axs[i,j])
+			metric.plot.kde(bw_method = 0.3, ax = axs[i,j], label = label)
 			plt.setp(axs[i,j].get_xticklabels(), rotation=45)
 			axs[i,j].set_title("{}-{}".format(stock, stat))
-			
-
-	if savefig:
-		plt.savefig("Errors.png")
-	fig.tight_layout()
-	plt.show()
 	
 
 '''
