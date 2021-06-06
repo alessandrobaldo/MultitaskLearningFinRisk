@@ -533,8 +533,8 @@ def backtest_ws(r_true, r_pred, estimation_window=30, weighting=weight_ew, verbo
 		weights_true = [weighting(r_true.iloc[win[0]:win[1]], **kwargs) for win in windows]
 		weights_pred = [weighting(pd.concat([r_true.iloc[win[0]:win[1]], r_pred.iloc[win[1]:win[2]]]), **kwargs) for win in windows]
 		# convert List of weights to DataFrame
-		weights_true = pd.DataFrame(weights_true, index=r_true.iloc[30:n_periods-estimation_window].index, columns=r_true.columns)
-		weights_pred = pd.DataFrame(weights_pred, index=r_pred.iloc[30:n_periods-estimation_window].index, columns=r_pred.columns)
+		weights_true = pd.DataFrame(weights_true, index=r_true.iloc[31:n_periods-estimation_window+1].index, columns=r_true.columns)
+		weights_pred = pd.DataFrame(weights_pred, index=r_pred.iloc[31:n_periods-estimation_window+1].index, columns=r_pred.columns)
 	else:
 		weights_true = weight_look_ahead(r_true, window = estimation_window, look_ahead = False)
 		weights_pred = weight_look_ahead(r_pred, window = estimation_window, look_ahead = True).iloc[estimation_window:]
